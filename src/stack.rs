@@ -50,7 +50,7 @@ impl<'source> Stack<'source> {
     /// Emit an error with the current state
     pub fn emit_err(&self) -> Error {
         Error::Syntax {
-            expected: self.expecting(),
+            expected: self.could_expect.clone(),
             found: self.error_token().clone().into_owned(),
         }
     }

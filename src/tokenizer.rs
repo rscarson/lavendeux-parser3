@@ -694,6 +694,11 @@ impl Category {
                 .join(", ")
         )
     }
+
+    pub fn format_rules(this: &Vec<Rule>) -> String {
+        let categories = Category::from_ruleset(this);
+        Category::many_to_string(&categories)
+    }
 }
 
 pub struct Tokenizer<'source>(logos::Lexer<'source, Rule>);

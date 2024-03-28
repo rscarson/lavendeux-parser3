@@ -1,13 +1,13 @@
-use crate::tokenizer::{Category, Token};
+use crate::tokenizer::{Category, Rule, Token};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error(
         "{found}\n= Syntax error; expected one of:\n= {}",
-        Category::many_to_string(expected)
+        Category::format_rules(expected)
     )]
     Syntax {
-        expected: Vec<Category>,
+        expected: Vec<Rule>,
         found: Token<'static>,
     },
 
