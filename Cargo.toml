@@ -1,0 +1,23 @@
+[package]
+name = "rowan"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+debug_compiler_internal = []
+
+[profile.release]
+debug = true
+
+[dependencies]
+strum = {version = "0.26.2", features=["derive"]}
+strum_macros = "0.26"
+stacker = "0.1.15"
+lazy_static = "1.4.0"
+
+# Tokenizer
+logos = "0.14.0"
+
+# Error type definition
+thiserror = "1.0.50"

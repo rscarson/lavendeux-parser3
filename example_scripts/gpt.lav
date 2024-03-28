@@ -1,0 +1,75 @@
+/**
+ * Chat with GPT-3.5
+ * Demonstration of Lavendeux's API functionality
+ * 
+ * Important note; you need to set an API key for this to work. You can do so with the following command:
+ * `api_key('chatgpt', '<key>')`
+ *
+ * Also I don't actually have an API key for this, so I can't test it fully
+ * But if the responses are as documented, it should work?
+ */
+
+ api_add('chatgpt', {
+    "additional_headers": {"Content-Type": "application/json"}, 
+    "base_url": "https://api.openai.com/v1/chat/completions", 
+    "description": "Chat with GPT-3.5", 
+    "examples": "gpt('hello world')"
+})
+
+gpt(prompt:string):string = {
+    api = global('__api_definitions')['chatgpt']
+    if !(api contains 'auth_key') {
+        error("API key for chatgpt is not set. You can set one with api_key('chatgpt', '<key>')")
+    } else {
+        body = __build_gpt_query(prompt)
+        resp = 'chatgpt'.api_post(body)
+        __decode_gpt_response(resp)
+    }
+}
+document_function('gpt', {
+    "category": "Network",
+    "description": "Query ChatGPT 3.5",
+    "examples": "gpt('hello!')",
+})
+
+// Get a JSON string to send to the API
+__build_gpt_query(prompt:string):string = {
+    to_json({
+        "model": "gpt-3.5-turbo",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a chatbot that must respond in concise, single-line messages."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    })
+}
+
+// Decode the response from the API
+__decode_gpt_response(response:object):string = {
+    response['choices'][0]['message']['content']
+}
+
+//
+// Tests
+//
+
+__test__build_gpt_query() = {
+    q = __build_gpt_query('hello!')
+    assert(q contains 'gpt-3.5-turbo')
+    assert(q contains 'You are a chatbot that must respond in concise, single-line messages.')
+    assert(q contains 'hello!')
+}
+
+__test__decode_gpt_response() = {
+    r = {
+        "choices": [{"message": 
+            {"content": "Hello, how can I help you?"}
+        }]
+    }
+    assert_eq(__decode_gpt_response(r), "Hello, how can I help you?")
+}
