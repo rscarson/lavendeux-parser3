@@ -11,11 +11,11 @@ pub trait IntoOwned {
     fn into_owned(self) -> Self::Owned;
 }
 
-mod error;
-mod parser;
-mod pratt;
-mod stack;
-mod tokenizer;
+pub mod error;
+pub mod parser;
+pub mod pratt;
+pub mod stack;
+pub mod tokenizer;
 
 const MIN_STACK_SIZE: usize = 32 * 1024 * 1024;
 

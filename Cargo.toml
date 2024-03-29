@@ -1,5 +1,5 @@
 [package]
-name = "rowan"
+name = "lavendeux_parser"
 version = "0.1.0"
 edition = "2021"
 
@@ -21,3 +21,14 @@ logos = "0.14.0"
 
 # Error type definition
 thiserror = "1.0.50"
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+
+[[bench]]
+name = "load_script"
+harness = false
+
+[[bench]]
+name = "load_data"
+harness = false
