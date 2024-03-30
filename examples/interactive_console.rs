@@ -7,12 +7,6 @@ use lavendeux_parser::{
 const MIN_STACK_SIZE: usize = 32 * 1024 * 1024;
 
 fn main() {
-    let input = std::fs::read_to_string("example_scripts/zarbans_grotto.lav").unwrap();
-    let tokens = Lexer::new(&input).all_tokens();
-    let mut tokens = Stack::new(tokens);
-    let _ast =
-        parser::core::ScriptNode::parse(&mut tokens).expect("Could not parse zarbans_grotto.lav");
-
     stacker::grow(MIN_STACK_SIZE, || interactive_compiler())
 }
 
