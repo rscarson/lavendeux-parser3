@@ -1,4 +1,7 @@
-use crate::tokenizer::{Category, Rule, Token};
+use crate::{
+    lexer::{Category, Rule, Token},
+    literals::LiteralError,
+};
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
@@ -26,9 +29,6 @@ pub enum Error {
     #[error("{0}\n= Not the name of a decorator; expected an identifier")]
     NotADecorator(Token<'static>),
 
-    #[error("{0}\n= Invalid float literal")]
-    InvalidFloatLiteral(Token<'static>),
-
-    #[error("{0}\n= Invalid integer literal")]
-    InvalidIntLiteral(Token<'static>),
+    #[error("{0}\n= {1}")]
+    InvalidLiteral(Token<'static>, LiteralError),
 }

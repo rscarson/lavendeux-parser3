@@ -1,5 +1,5 @@
 use super::*;
-use crate::{tokenizer::Rule, IntoOwned};
+use crate::{lexer::Rule, IntoOwned};
 
 pratt_node!(BitwiseInfixExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source>) {
     build(token, lhs, op, rhs) {

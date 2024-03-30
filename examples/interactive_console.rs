@@ -1,14 +1,14 @@
 use lavendeux_parser::{
+    lexer::Lexer,
+    lexer::Stack,
     parser::{self, ParserNode},
-    stack::Stack,
-    tokenizer::Tokenizer,
 };
 
 const MIN_STACK_SIZE: usize = 32 * 1024 * 1024;
 
 fn main() {
     let input = std::fs::read_to_string("example_scripts/zarbans_grotto.lav").unwrap();
-    let tokens = Tokenizer::new(&input).all_tokens();
+    let tokens = Lexer::new(&input).all_tokens();
     let mut tokens = Stack::new(tokens);
     let _ast =
         parser::core::ScriptNode::parse(&mut tokens).expect("Could not parse zarbans_grotto.lav");
@@ -41,7 +41,7 @@ fn interactive_compiler() {
             let t = std::time::Instant::now();
             let input = cmd.as_str();
 
-            let tokens = Tokenizer::new(input).all_tokens();
+            let tokens = Lexer::new(input).all_tokens();
             println!("{tokens:#?}");
             let mut tokens = Stack::new(tokens);
             match parser::core::ScriptNode::parse(&mut tokens) {

@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    tokenizer::{Category, Rule, Token},
+    lexer::{Category, Rule, Token},
     IntoOwned,
 };
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["debug_compiler_internal"]
+default = []
 debug_compiler_internal = []
 
 [profile.release]
@@ -15,6 +15,9 @@ strum = {version = "0.26.2", features=["derive"]}
 strum_macros = "0.26"
 stacker = "0.1.15"
 lazy_static = "1.4.0"
+
+# Types
+fpdec = "0.10.3"
 
 # Tokenizer
 logos = "0.14.0"

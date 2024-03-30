@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     error::Error,
-    tokenizer::{Rule, TokenSpan},
+    lexer::{Rule, TokenSpan},
     IntoOwned,
 };
 

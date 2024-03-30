@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    tokenizer::{Rule, TokenSpan},
+    lexer::{Rule, TokenSpan},
     IntoOwned,
 };
 
@@ -15,7 +15,7 @@ define_node!(ScriptNode(lines: Vec<Node<'source>>) {
                 break;
             }
 
-            lines.push(non_terminal!(LineNode, tokens)?);
+            lines.push(non_terminal!(LineNode?, tokens)?);
         }
 
         let token = match (lines.first(), lines.last()) {

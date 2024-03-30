@@ -1,4 +1,5 @@
 use crate::{
+    lexer::Rule::{self, *},
     parser::{
         arithmetic::*,
         assignment::*,
@@ -10,7 +11,6 @@ use crate::{
         functions::FnCallNode,
         Node,
     },
-    tokenizer::Rule::{self, *},
 };
 
 use lazy_static::lazy_static;
@@ -127,7 +127,7 @@ pub fn build_pratt_binary<'source>(
     op: Node<'source>,
     rhs: Node<'source>,
 ) -> Option<Node<'source>> {
-    use crate::tokenizer::Rule::*;
+    use crate::lexer::Rule::*;
     let token = lhs.token().child(
         op.token().rule(),
         lhs.token().span().start..rhs.token().span().end,
@@ -165,7 +165,7 @@ pub fn build_pratt_binary<'source>(
 /// Convert a set of nodes into a single unary expression node
 #[inline(always)]
 pub fn build_pratt_unary<'source>(term: Node<'source>, op: Node<'source>) -> Option<Node<'source>> {
-    use crate::tokenizer::Rule::*;
+    use crate::lexer::Rule::*;
     let mut token = op.token().clone();
     token.include_span(term.token().span());
     match op.token().rule() {

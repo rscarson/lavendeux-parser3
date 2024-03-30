@@ -1,5 +1,5 @@
 use super::*;
-use crate::{tokenizer::Rule, IntoOwned};
+use crate::{lexer::Rule, IntoOwned};
 
 // LBrack ~ EOL* ~ (Array | (Expression ~ EOL* ~ Comma ~ EOL*)) ~ Expression? ~ RBrack
 define_node!(ArrayNode(elements: Vec<Node<'source>>) {

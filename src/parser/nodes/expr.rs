@@ -1,7 +1,6 @@
 use super::*;
 use crate::{
-    pratt,
-    tokenizer::{Rule, TokenSpan},
+    lexer::{Rule, TokenSpan},
     IntoOwned,
 };
 
@@ -58,7 +57,7 @@ node_silent!(ExpressionNode(tokens) {
 
     tokens.apply_transaction();
     expr.reverse(); // pratt expects the expression to be in reverse order
-    pratt::fold_expression(&mut expr, u8::MAX)
+    crate::parser::pratt::fold_expression(&mut expr, u8::MAX)
 });
 
 // "(" ~ EXPR ~ ")" | Array | Object | SKIP_KEYWORD | BREAK_EXPRESSION | RETURN_EXPRESSION | FOR_LOOP_EXPRESSION | SWITCH_EXPRESSION | IF_EXPRESSION | Literal
@@ -74,8 +73,10 @@ node_silent!(TermNode(tokens) {
         Some(expr)
     } else {
         let t = non_terminal!(
-            LiteralStringNode|LiteralIdentNode|LiteralCurrencyNode|LiteralDecimalNode|LiteralFloatNode|LiteralBoolNode|LiteralConstNode
-            | LiteralU8Node|LiteralU16Node|LiteralU32Node|LiteralU64Node|LiteralI8Node|LiteralI16Node|LiteralI32Node|LiteralI64Node
+            LiteralStringNode|LiteralRegexNode
+            | LiteralIdentNode
+            | LiteralCurrencyNode|LiteralFloatNode|LiteralBoolNode|LiteralConstNode
+            | LiteralIntNode|LiteralRadixNode
             | ArrayNode|ObjectNode
             | ContinueNode|BreakNode|ReturnNode
             | ForNode|SwitchNode|IfNode

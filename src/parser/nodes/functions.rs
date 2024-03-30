@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    tokenizer::{Rule, TokenSpan},
+    lexer::{Rule, TokenSpan},
     IntoOwned,
 };
 

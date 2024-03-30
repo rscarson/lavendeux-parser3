@@ -1,14 +1,14 @@
 #[allow(unused_macros)]
 macro_rules! generate_benches {
     ($input_file:literal) => {
+        use lavendeux_parser::lexer::Stack;
+        use lavendeux_parser::lexer::{Lexer, Token};
         use lavendeux_parser::parser;
         use lavendeux_parser::parser::ParserNode;
-        use lavendeux_parser::stack::Stack;
-        use lavendeux_parser::tokenizer::{Token, Tokenizer};
         const INPUT: &'static str = include_str!($input_file);
 
         fn lexer_pass() -> Vec<Token<'static>> {
-            Tokenizer::new(INPUT).all_tokens()
+            Lexer::new(INPUT).all_tokens()
         }
 
         fn compiler_pass1(mut stack: Stack) {
