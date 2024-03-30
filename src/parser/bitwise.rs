@@ -5,7 +5,7 @@ pratt_node!(BitwiseInfixExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::BitwiseInfixExpr);
         let op = op.token().rule();
-        Ok(Self { lhs, op, rhs, token }.into_node())
+        Some(Self { lhs, op, rhs, token }.into_node())
     }
 
     into_node(this) {
@@ -25,7 +25,7 @@ pratt_node!(BitwiseInfixExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source
 pratt_node!(BitwiseNotNode(rhs: Node<'source>) {
     build(token, rhs, _op) {
         token.set_rule(Rule::BitwiseNot);
-        Ok(Self { rhs, token }.into_node())
+        Some(Self { rhs, token }.into_node())
     }
 
     into_node(this) {

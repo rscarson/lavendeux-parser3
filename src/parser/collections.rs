@@ -63,7 +63,7 @@ define_node!(ArrayNode(elements: Vec<Node<'source>>) {
         tokens.apply_transaction();
 
         let elements = stack.pop().unwrap();
-        Ok(Self { elements, token }.into_node())
+        Some(Self { elements, token }.into_node())
     }
 
     into_node(this) {
@@ -160,7 +160,7 @@ define_node!(ObjectNode(elements: Vec<(Node<'source>, Node<'source>)>) {
         tokens.apply_transaction();
 
         let elements = pairs_from_vec(stack.pop().unwrap());
-        Ok(Self { elements, token }.into_node())
+        Some(Self { elements, token }.into_node())
     }
 
     into_node(this) {
@@ -178,7 +178,7 @@ define_node!(ObjectNode(elements: Vec<(Node<'source>, Node<'source>)>) {
 pratt_node!(RangeExprNode(start: Node<'source>, end: Node<'source>) {
     build(token, start, _op, end) {
         token.set_rule(Rule::RangeExpr);
-        Ok(Self { start, end, token }.into_node())
+        Some(Self { start, end, token }.into_node())
     }
 
     into_node(this) {
@@ -200,7 +200,7 @@ pratt_node!(IndexingExprNode(base: Node<'source>, path: Vec<Option<Node<'source>
         let path = if let Node::PostfixIndexingOperator(op) = op { op } else {
             unreachable!("Invalid operator: {:?}", op)
         }.path;
-        Ok(Self { base, path, token }.into_node())
+        Some(Self { base, path, token }.into_node())
     }
 
     into_node(this) {

@@ -1,5 +1,4 @@
 use crate::{
-    error::Error,
     parser::{
         arithmetic::*,
         assignment::*,
@@ -57,12 +56,12 @@ macro_rules! bind {
 pub fn fold_expression<'source>(
     expr: &mut Vec<Node<'source>>,
     max_bp: u8,
-) -> Result<Node<'source>, Error> {
+) -> Option<Node<'source>> {
     // Get the left hand side of the expression
     // It's either a term or a prefix operator
     let mut lhs = match expr.pop() {
         Some(lhs) => lhs,
-        None => return Err(Error::UnexpectedEndOfInput),
+        None => return None,
     };
 
     // Check if the left hand side is a prefix operator
@@ -90,7 +89,7 @@ pub fn fold_expression<'source>(
         // Get the binding power of the operator
         // Check if it's a postfix operator
         let (left_bp, right_bp) = priority_of(op_rule)
-            .ok_or_else(|| unreachable!("Unregistered operator: {:?}", op_rule))?;
+            .or_else(|| unreachable!("Unregistered operator: {:?}", op_rule))?;
         match (left_bp, right_bp) {
             (0, right_bp) => {
                 // Postfix
@@ -118,7 +117,7 @@ pub fn fold_expression<'source>(
         lhs = build_pratt_binary(lhs, op, rhs)?;
     }
 
-    Ok(lhs)
+    Some(lhs)
 }
 
 /// Convert a set of nodes into a single infix expression node
@@ -127,7 +126,7 @@ pub fn build_pratt_binary<'source>(
     lhs: Node<'source>,
     op: Node<'source>,
     rhs: Node<'source>,
-) -> Result<Node<'source>, Error> {
+) -> Option<Node<'source>> {
     use crate::tokenizer::Rule::*;
     let token = lhs.token().child(
         op.token().rule(),
@@ -165,10 +164,7 @@ pub fn build_pratt_binary<'source>(
 
 /// Convert a set of nodes into a single unary expression node
 #[inline(always)]
-pub fn build_pratt_unary<'source>(
-    term: Node<'source>,
-    op: Node<'source>,
-) -> Result<Node<'source>, Error> {
+pub fn build_pratt_unary<'source>(term: Node<'source>, op: Node<'source>) -> Option<Node<'source>> {
     use crate::tokenizer::Rule::*;
     let mut token = op.token().clone();
     token.include_span(term.token().span());

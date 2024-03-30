@@ -19,8 +19,10 @@ macro_rules! generate_benches {
             c.bench_function("Pass 1: Lexer", |b| b.iter(|| lexer_pass()));
 
             c.bench_function("Pass 2: Compiler phase-1", |b| {
-                let stack = Stack::new(lexer_pass());
-                compiler_pass1(black_box(stack))
+                b.iter(|| {
+                    let stack = Stack::new(lexer_pass());
+                    compiler_pass1(black_box(stack))
+                })
             });
         }
     };

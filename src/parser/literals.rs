@@ -6,7 +6,7 @@ define_node!(LiteralStringNode() {
         tokens.start_transaction();
         let token = terminal!(LiteralString, tokens)?;
         tokens.apply_transaction();
-        Ok(Node::LiteralString(Box::new(Self { token })))
+        Some(Node::LiteralString(Box::new(Self { token })))
     }
 
     into_node(this) {
@@ -27,11 +27,11 @@ define_node!(LiteralFloatNode(value: f64) {
         match token.slice().replace('_', "").parse() {
             Ok(value) => {
                 tokens.apply_transaction();
-                Ok(Self { token, value }.into_node())
+                Some(Self { token, value }.into_node())
             },
             Err(_) => {
                 tokens.revert_transaction();
-                Err(Error::InvalidFloatLiteral(token.into_owned()))
+                error_node!(Error::InvalidFloatLiteral(token.into_owned()))
             },
         }
     }
@@ -57,7 +57,7 @@ define_node!(LiteralBoolNode(value: bool) {
             _ => false,
         };
         tokens.apply_transaction();
-        Ok(Node::LiteralBool(Box::new(Self { token, value })))
+        Some(Node::LiteralBool(Box::new(Self { token, value })))
     }
 
     into_node(this) {
@@ -77,7 +77,7 @@ define_node!(LiteralCurrencyNode() {
         tokens.start_transaction();
         let token = terminal!(LiteralCurrency, tokens)?;
         tokens.apply_transaction();
-        Ok(Self { token }.into_node())
+        Some(Self { token }.into_node())
     }
 
     into_node(this) {
@@ -96,7 +96,7 @@ define_node!(LiteralDecimalNode() {
         tokens.start_transaction();
         let token = terminal!(LiteralDecimal, tokens)?;
         tokens.apply_transaction();
-        Ok(Self { token }.into_node())
+        Some(Self { token }.into_node())
     }
 
     into_node(this) {
@@ -119,11 +119,11 @@ macro_rules! define_intliteral_node {
                 match token.slice().replace('_', "").parse::<$size>() {
                     Ok(value) => {
                         tokens.apply_transaction();
-                        Ok(Self { token, value }.into_node())
+                        Some(Self { token, value }.into_node())
                     },
                     Err(_) => {
                         tokens.revert_transaction();
-                        Err(Error::InvalidIntLiteral(token.into_owned()))
+                        error_node!(Error::InvalidIntLiteral(token.into_owned()))
                     },
                 }
             }
@@ -156,7 +156,7 @@ define_node!(LiteralIdentNode() {
         let token = terminal!(LiteralIdent, tokens)?;
 
         tokens.apply_transaction();
-        Ok(Self { token }.into_node())
+        Some(Self { token }.into_node())
     }
 
     into_node(this) {
@@ -179,11 +179,11 @@ node_silent!(LiteralConstNode(tokens) {
     tokens.start_transaction();
     let token = terminal!(LiteralConstPi|LiteralConstE|LiteralConstTau|LiteralConstNil|LiteralConstTrue|LiteralConstFalse, tokens)?;
     let node = match token.rule() {
-        Rule::LiteralConstPi => Ok(LiteralFloatNode { token, value: std::f64::consts::PI }.into_node()),
-        Rule::LiteralConstE => Ok(LiteralFloatNode { token, value: std::f64::consts::E }.into_node()),
-        Rule::LiteralConstTau => Ok(LiteralFloatNode { token, value: std::f64::consts::TAU }.into_node()),
-        Rule::LiteralConstNil|Rule::LiteralConstFalse => Ok(LiteralBoolNode { token, value: false }.into_node()),
-        Rule::LiteralConstTrue => Ok(LiteralBoolNode { token, value: true }.into_node()),
+        Rule::LiteralConstPi => Some(LiteralFloatNode { token, value: std::f64::consts::PI }.into_node()),
+        Rule::LiteralConstE => Some(LiteralFloatNode { token, value: std::f64::consts::E }.into_node()),
+        Rule::LiteralConstTau => Some(LiteralFloatNode { token, value: std::f64::consts::TAU }.into_node()),
+        Rule::LiteralConstNil|Rule::LiteralConstFalse => Some(LiteralBoolNode { token, value: false }.into_node()),
+        Rule::LiteralConstTrue => Some(LiteralBoolNode { token, value: true }.into_node()),
 
         _ => unreachable!("Invalid constant rule: {:?}", token.rule())
     };

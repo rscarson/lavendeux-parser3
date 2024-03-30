@@ -1,19 +1,12 @@
-use crate::{tokenizer::Token, IntoOwned};
+use crate::{error::Error, tokenizer::Token, IntoOwned};
 
 /// Attempt to match a single token
-/// Examples:
-/// ```rust
-/// terminal!(ConstLiteral, tokens)?; // Match exactly one token
-/// terminal!(ConstLiteral?, tokens)?; // Match 0 or one token
-/// terminal!(ConstLiteral*, tokens)?; // Match 0 or more token
-/// terminal!(ConstLiteral+, tokens)?; // Match 1 or more token
-/// ````
 macro_rules! terminal {
     (& $type:ident $(| $($subtype:ident)|+)?, $tokens:expr) => {
         $tokens.try_peek_a(&[$crate::tokenizer::Rule::$type $(, $($crate::tokenizer::Rule::$subtype,)+)?]).cloned()
     };
     ($type:ident $(| $($subtype:ident)|+)? ?, $tokens:expr) => {
-        match terminal!(&$type $(| $($subtype)|+)?, $tokens).ok() {
+        match terminal!(&$type $(| $($subtype)|+)?, $tokens) {
             Some(_) => $tokens.pop(),
             None => None
         }
@@ -27,23 +20,18 @@ macro_rules! terminal {
     }};
     ($type:ident $(| $($subtype:ident)|+)? +, $tokens:expr) => {
         match terminal!($type $(| $($subtype)|+)?, $tokens) {
-            Ok(t) => {
+            Some(t) => {
                 let mut v = vec![t];
                 while let Some(t) = terminal!($type $(| $($subtype)|+)? ?, $tokens) {
                     v.push(t)
                 }
-                Ok(v)
+                Some(v)
             }
-            Err(e) =>  Err(e)
+            None => None
         }
     };
     ($type:ident $(| $($subtype:ident)|+)?, $tokens:expr) => {
-        match $tokens.try_pop_a(&[$crate::tokenizer::Rule::$type $(, $($crate::tokenizer::Rule::$subtype,)+)?]) {
-            Ok(t) => Ok(t),
-            Err(e) => {
-                Err(e)
-            }
-        }
+        $tokens.try_pop_a(&[$crate::tokenizer::Rule::$type $(, $($crate::tokenizer::Rule::$subtype,)+)?])
     };
 }
 
@@ -57,7 +45,7 @@ macro_rules! skip_eol {
 macro_rules! build_nt {
     ($type:ident, $tokens:expr) => {{
         match $tokens.len() == 0 {
-            true => Err($crate::error::Error::UnexpectedEndOfInput),
+            true => None,
             _ => {
                 #[cfg(feature = "debug_compiler_internal")]
                 println!(
@@ -73,13 +61,6 @@ macro_rules! build_nt {
 }
 
 /// Attempt to match a NT
-/// Examples:
-/// ```rust
-/// non_terminal!(Expression, tokens)?; // Match exactly one expression
-/// non_terminal!(Expression?, tokens)?; // Match 0 or one expression
-/// non_terminal!(Expression*, tokens)?; // Match 0 or more expression
-/// non_terminal!(Expression+, tokens)?; // Match 1 or more expression
-/// ````
 macro_rules! non_terminal {
     (! $type:ident, $tokens:expr) => {{
         match non_terminal!($type?, $tokens) {
@@ -91,7 +72,7 @@ macro_rules! non_terminal {
         }
     }};
     ($type:ident ?, $tokens:expr) => {
-        build_nt!($type, $tokens).ok()
+        build_nt!($type, $tokens)
     };
     ($type:ident *, $tokens:expr) => {{
         let mut v = Vec::new();
@@ -114,42 +95,38 @@ macro_rules! non_terminal {
     };
     ($type:ident  $(| $($subtype:ident)|+)?, $tokens:expr) => {
         match build_nt!($type, $tokens) {
-            Ok(t) => Ok(t),
-            Err(e) => {
-                #[allow(unused_mut)]
-                let mut result = Err(e);
+            Some(t) => Some(t),
+            None => {
                 $(
+                    let mut result = None;
                     'block: {
-                        if !matches!(result, Err(crate::error::Error::Syntax { .. })) {
-                            // If it's not a syntax error, break
-                            break 'block;
-                        }
-
                         $(
                             match build_nt!($subtype, $tokens) {
-                                Ok(t) => {
-                                    result = Ok(t);
+                                Some(t) => {
+                                    result = Some(t);
                                     break 'block;
                                 },
-                                Err(e) => {
-                                    result = Err(e);
-                                    if !matches!(result, Err(crate::error::Error::Syntax { .. })) {
-                                        // If it's not a syntax error, break
-                                        break 'block;
-                                    }
-                                }
+                                None => {}
                             }
                         )+
                     }
+
+                    if result.is_none() {
+                        $tokens.revert_transaction();
+                    }
+                    return result;
                 )?
 
-                if result.is_err() {
-                    $tokens.revert_transaction();
-                }
-
-                result
+                #[allow(unreachable_code)]
+                None
             }
         }
+    };
+}
+
+macro_rules! error_node {
+    ($error:expr) => {
+        Some(Node::Error($error))
     };
 }
 
@@ -160,9 +137,7 @@ where
     Self: IntoOwned,
 {
     fn into_node(self) -> crate::parser::Node<'source>;
-    fn parse(
-        tokens: &mut crate::Stack<'source>,
-    ) -> Result<crate::parser::Node<'source>, crate::error::Error>;
+    fn parse(tokens: &mut crate::stack::Stack<'source>) -> Option<crate::parser::Node<'source>>;
 }
 
 macro_rules! define_node {
@@ -190,7 +165,7 @@ macro_rules! define_node {
                 let $nselfarg = self;
                 $nblock
             }
-            fn parse($bstack_arg: &mut $crate::Stack<'source>) -> Result<$crate::parser::Node<'source>, $crate::error::Error> $bblock
+            fn parse($bstack_arg: &mut $crate::stack::Stack<'source>) -> Option<$crate::parser::Node<'source>> $bblock
         }
     };
 }
@@ -220,7 +195,7 @@ macro_rules! pratt_node {
                 let $nselfarg = self;
                 $nblock
             }
-            pub fn parse(mut $bt_arg: Token<'source>, $bl_arg: Node<'source>, $bo_arg: Node<'source>$(, $br_arg: Node<'source>)?) -> Result<$crate::parser::Node<'source>, $crate::error::Error> $bblock
+            pub fn parse(mut $bt_arg: Token<'source>, $bl_arg: Node<'source>, $bo_arg: Node<'source>$(, $br_arg: Node<'source>)?) -> Option<$crate::parser::Node<'source>> $bblock
         }
     };
 }
@@ -234,7 +209,7 @@ macro_rules! pratt_node_silent {
         #[derive(Clone, Debug)]
         pub struct $name { }
         impl $name {
-            pub fn parse<'source>(mut $bt_arg: Token<'source>, $bl_arg: Node<'source>, $bo_arg: Node<'source>$(, $br_arg: Node<'source>)?) -> Result<$crate::parser::Node<'source>, $crate::error::Error> $bblock
+            pub fn parse<'source>(mut $bt_arg: Token<'source>, $bl_arg: Node<'source>, $bo_arg: Node<'source>$(, $br_arg: Node<'source>)?) -> Option<$crate::parser::Node<'source>> $bblock
         }
     };
 }
@@ -261,6 +236,7 @@ macro_rules! define_parser {
     ($($name:ident : $src:ident),+ $(,)?) => {
         #[derive(Clone)]
         pub enum Node<'source> {
+            Error(Error),
             $(
                 $name(Box<$src<'source>>),
             )+
@@ -269,6 +245,16 @@ macro_rules! define_parser {
         impl<'source> Node<'source> {
             pub fn token(&self) -> &Token<'source> {
                 match self {
+                    Self::Error(e) => match e {
+                        Error::UnrecognizedToken(t) => t,
+                        Error::Syntax { found, ..} => found,
+                        Error::UnreachableSwitchCase(t) => t,
+                        Error::MissingElse(t) => t,
+                        Error::AssignmentToConstant(t) => t,
+                        Error::NotADecorator(t) => t,
+                        Error::InvalidFloatLiteral(t) => t,
+                        Error::InvalidIntLiteral(t) => t,
+                    }
                     $(
                         Self::$name(n) => &n.token,
                     )+
@@ -280,6 +266,7 @@ macro_rules! define_parser {
             type Owned = Node<'static>;
             fn into_owned(self) -> Self::Owned {
                 match self {
+                    Self::Error(e) => Self::Owned::Error(e),
                     $(
                         Self::$name(n) => Self::Owned::$name(Box::new(n.into_owned())),
                     )+
@@ -290,6 +277,7 @@ macro_rules! define_parser {
         impl std::fmt::Debug for Node<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
+                    Self::Error(e) => write!(f, "{:?}", e),
                     $(
                         Self::$name(n) => write!(f, "{:?}", n),
                     )+

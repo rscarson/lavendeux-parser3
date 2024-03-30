@@ -496,8 +496,8 @@ pub enum Rule {
     LiteralFloat,
 
     #[regex(r#"(?:/(?:\\.|[^\\/])+/[a-zA-Z]*)"#)] // Regex literal
-    #[regex(r#"(?:"(?:(?:[^"\\])|(?:\\.))*")"#)] // " string literal "
-    #[regex(r#"(?:'(?:(?:[^'\\])|(?:\\.))*')"#)] // ' string literal '
+    #[regex(r#"'([^'\\]|\\.)*'"#, |lex| lex.slice()[1..lex.slice().len() - 1])] // ' string literal '
+    #[regex(r#""([^"\\]|\\.)*""#)] // " string literal "
     LiteralString,
 
     Error,
@@ -722,11 +722,18 @@ impl<'source> Tokenizer<'source> {
     pub fn all_tokens(mut self) -> Vec<Token<'source>> {
         let mut tokens = vec![];
         loop {
-            tokens.push(self.consume_next());
-            if tokens.last().unwrap().rule == Rule::EOI {
-                break;
+            let next = self.consume_next();
+            println!("{next:?}");
+            match next {
+                t if t.rule == Rule::EOI => {
+                    tokens.push(t);
+                    break;
+                }
+
+                t => tokens.push(t),
             }
         }
+
         tokens
     }
 }

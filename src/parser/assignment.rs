@@ -82,9 +82,9 @@ pratt_node!(AssignExprNode(target: AssignmentTarget<'source>, value: Node<'sourc
         token.set_rule(Rule::AssignExpr);
         let lhs_token = lhs.token().clone();
         match AssignmentTarget::from_node(lhs) {
-            Some(target) => Ok(Self { target, value: rhs, token }.into_node()),
+            Some(target) => Some(Self { target, value: rhs, token }.into_node()),
             None => {
-                Err(Error::AssignmentToConstant(lhs_token.clone().into_owned()))
+                error_node!(Error::AssignmentToConstant(lhs_token.clone().into_owned()))
             }
         }
     }
@@ -112,7 +112,7 @@ pratt_node!(AssignArithmeticExprNode(assignment: AssignExprNode<'source>, op: Ru
             _ => unreachable!(),
         };
 
-        Ok(Self { assignment, op: op_rule, token }.into_node())
+        Some(Self { assignment, op: op_rule, token }.into_node())
     }
 
     into_node(this) {
@@ -138,7 +138,7 @@ pratt_node!(AssignBitwiseExprNode(assignment: AssignExprNode<'source>, op: Rule)
             _ => unreachable!(),
         };
 
-        Ok(Self { assignment, op: op_rule, token }.into_node())
+        Some(Self { assignment, op: op_rule, token }.into_node())
     }
 
     into_node(this) {
@@ -164,17 +164,17 @@ pratt_node!(DeleteExprNode(target: AssignmentTarget<'source>) {
                     name_span: ident.token.span()
                 }
             } else{
-                return Err(Error::NotADecorator(term.token().clone().into_owned()));
+                return error_node!(Error::NotADecorator(term.token().clone().into_owned()));
             }
         } else {
             let term_token = term.token().clone();
             match AssignmentTarget::from_node(term) {
                 Some(target) => target,
-                None => return Err(Error::AssignmentToConstant(term_token.into_owned())),
+                None => return error_node!(Error::AssignmentToConstant(term_token.into_owned())),
             }
         };
 
-        Ok(Self { target, token }.into_node())
+        Some(Self { target, token }.into_node())
     }
 
     into_node(this) {

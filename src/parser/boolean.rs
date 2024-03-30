@@ -5,7 +5,7 @@ pratt_node!(LogicalExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source>) {
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::LogicalExpr);
         let op = op.token().rule();
-        Ok(Self { lhs, op, rhs, token }.into_node())
+        Some(Self { lhs, op, rhs, token }.into_node())
     }
 
     into_node(this) {
@@ -26,7 +26,7 @@ pratt_node!(ComparisonExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source>)
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::ComparisonExpr);
         let op = op.token().rule();
-        Ok(Self { lhs, op, rhs, token }.into_node())
+        Some(Self { lhs, op, rhs, token }.into_node())
     }
 
     into_node(this) {
@@ -47,7 +47,7 @@ pratt_node!(MatchExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source>) {
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::MatchExpr);
         let op = op.token().rule();
-        Ok(Self { lhs, op, rhs, token }.into_node())
+        Some(Self { lhs, op, rhs, token }.into_node())
     }
 
     into_node(this) {
@@ -67,7 +67,7 @@ pratt_node!(MatchExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source>) {
 pratt_node!(LogicalNotNode(rhs: Node<'source>) {
     build(token, rhs, _op) {
         token.set_rule(Rule::LogicalNot);
-        Ok(Self { rhs, token }.into_node())
+        Some(Self { rhs, token }.into_node())
     }
 
     into_node(this) {

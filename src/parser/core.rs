@@ -30,7 +30,7 @@ define_node!(ScriptNode(lines: Vec<Node<'source>>) {
         };
 
         tokens.apply_transaction();
-        Ok(Self { lines, token }.into_node())
+        Some(Self { lines, token }.into_node())
     }
 
     into_node(this) {
@@ -53,7 +53,7 @@ node_silent!(LineNode(tokens) {
     terminal!(EOI|EOL+, tokens)?;
 
     tokens.apply_transaction();
-    Ok(expr)
+    Some(expr)
 });
 
 // "{" ~ LINE* ~ EXPR? ~ "}" | EXPR
@@ -75,18 +75,18 @@ define_node!(BlockNode(lines: Vec<Node<'source>>) {
                 if lines.is_empty() {
                     // Empty block is just an empty object right?
                     token.set_rule(Rule::Object);
-                    Ok(ObjectNode {
+                    Some(ObjectNode {
                         elements: vec![],
                         token
                     }.into_node())
                 } else {
-                    Ok(Self { lines, token }.into_node())
+                    Some(Self { lines, token }.into_node())
                 }
             }
             None => {
                 let expr = non_terminal!(ExpressionNode, tokens)?;
                 tokens.apply_transaction();
-                Ok(expr)
+                Some(expr)
             }
         }
     }
@@ -106,7 +106,7 @@ define_node!(BlockNode(lines: Vec<Node<'source>>) {
 pratt_node!(CastExprNode(expr: Node<'source>, type_span: TokenSpan) {
     build(token, lhs, _op, rhs) {
         token.set_rule(Rule::CastExpr);
-        Ok(Self { expr: lhs, type_span: rhs.token().span(), token }.into_node())
+        Some(Self { expr: lhs, type_span: rhs.token().span(), token }.into_node())
     }
 
     into_node(this) {
@@ -125,7 +125,7 @@ pratt_node!(CastExprNode(expr: Node<'source>, type_span: TokenSpan) {
 pratt_node!(DecoratorExprNode(expr: Node<'source>, name_span: TokenSpan) {
     build(token, lhs, _op, rhs) {
         token.set_rule(Rule::DecoratorExpr);
-        Ok(Self { expr: lhs, name_span: rhs.token().span(), token }.into_node())
+        Some(Self { expr: lhs, name_span: rhs.token().span(), token }.into_node())
     }
 
     into_node(this) {

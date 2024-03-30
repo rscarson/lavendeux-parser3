@@ -40,7 +40,7 @@ define_node!(FnAssignNode(
                 Some(arg) => {
                     args.push(arg.span());
                     skip_eol!(tokens);
-                    if terminal!(Comma, tokens).is_err() {
+                    if terminal!(Comma, tokens).is_none() {
                         break;
                     }
                     skip_eol!(tokens);
@@ -66,7 +66,7 @@ define_node!(FnAssignNode(
         let body = non_terminal!(BlockNode, tokens)?;
 
         tokens.apply_transaction();
-        Ok(Self { name_span: name.span(), args, body, token }.into_node())
+        Some(Self { name_span: name.span(), args, body, token }.into_node())
     }
 
     into_node(this) {
@@ -95,7 +95,7 @@ define_node!(ReturnNode(value: Option<Node<'source>>) {
         }
 
         tokens.apply_transaction();
-        Ok(Self { value, token: token.child(Rule::ReturnExpr, token.span()) }.into_node())
+        Some(Self { value, token: token.child(Rule::ReturnExpr, token.span()) }.into_node())
     }
 
     into_node(this) {
@@ -120,14 +120,14 @@ pratt_node!(FnCallNode(name_span: TokenSpan, args: Vec<Node<'source>>) {
                     // Method call - LHS is the first argument
                     let mut args = vec![lhs];
                     args.extend(op.args.into_iter());
-                    Ok(Self {
+                    Some(Self {
                         name_span, token, args
                     }.into_node())
                 },
                 None => {
                     // Normal call - LHS is the function name
                     let name_span = lhs.token().span();
-                    Ok(Self {
+                    Some(Self {
                         name_span, token,
                         args: op.args.into_iter().collect(),
                     }.into_node())

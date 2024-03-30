@@ -1,7 +1,10 @@
 use crate::tokenizer::{Category, Rule, Token};
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
+    #[error("{0}\n= Syntax error; Unrecognized token")]
+    UnrecognizedToken(Token<'static>),
+
     #[error(
         "{found}\n= Syntax error; expected one of:\n= {}",
         Category::format_rules(expected)
@@ -10,12 +13,6 @@ pub enum Error {
         expected: Vec<Rule>,
         found: Token<'static>,
     },
-
-    #[error("Unexpected end of input")]
-    UnexpectedEndOfInput,
-
-    #[error("{0}\n= Syntax error; Unrecognized token")]
-    UnrecognizedToken(Token<'static>),
 
     #[error("{0}\n= Unreachable statement; Put this case before the default case")]
     UnreachableSwitchCase(Token<'static>),

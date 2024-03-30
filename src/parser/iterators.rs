@@ -12,7 +12,7 @@ define_node!(ContinueNode() {
         let token = terminal!(Continue, tokens)?;
 
         tokens.apply_transaction();
-        Ok(Self { token: token.child(Rule::ContinueExpr, token.span()) }.into_node())
+        Some(Self { token: token.child(Rule::ContinueExpr, token.span()) }.into_node())
     }
 
     into_node(this) {
@@ -38,7 +38,7 @@ define_node!(BreakNode(value: Option<Node<'source>>) {
         }
 
         tokens.apply_transaction();
-        Ok(Self { value, token: token.child(Rule::BreakExpr, token.span()) }.into_node())
+        Some(Self { value, token: token.child(Rule::BreakExpr, token.span()) }.into_node())
     }
 
     into_node(this) {
@@ -69,16 +69,16 @@ define_node!(ForNode(
         // (ident in )?
         tokens.start_transaction();
         let name_span = match non_terminal!(LiteralIdentNode, tokens) {
-            Ok(ident) => {
+            Some(ident) => {
                 let name_span = ident.token().span();
-                if terminal!(In, tokens).is_ok() {
+                if terminal!(In, tokens).is_some() {
                     tokens.apply_transaction();
                     Some(name_span)
                 } else {
                     None
                 }
             },
-            Err(_) => None
+            None => None
         };
 
         // EXPR do? BLOCK
@@ -90,21 +90,21 @@ define_node!(ForNode(
         // (where EXPR)?
         tokens.start_transaction();
         let condition = match terminal!(Where, tokens) {
-            Ok(_) => {
+            Some(_) => {
                 match non_terminal!(ExpressionNode, tokens) {
-                    Ok(expr) => {
+                    Some(expr) => {
                         tokens.apply_transaction();
                         token.include_span(expr.token().span());
                         Some(expr)
                     },
-                    Err(_) => None
+                    None => None
                 }
             },
-            Err(_) => None,
+            None => None,
         };
 
         tokens.apply_transaction();
-        Ok(Self { name_span, expr, block, condition, token }.into_node())
+        Some(Self { name_span, expr, block, condition, token }.into_node())
     }
 
     into_node(this) {
@@ -151,26 +151,26 @@ define_node!(SwitchNode(
         loop {
             tokens.start_transaction();
 
-            if terminal!(Comma, tokens).is_err() {
+            if terminal!(Comma, tokens).is_none() {
                 break;
             }
 
             let cmp = terminal!(SEq|SNe|Eq|Ne|Le|Lt|Ge|Gt ?, tokens).map(|t| t.rule());
             let value = match non_terminal!(ExpressionNode, tokens) {
-                Ok(v) => v,
-                Err(_) => break,
+                Some(v) => v,
+                None => break,
             };
-            if terminal!(FatArrow, tokens).is_err() {
+            if terminal!(FatArrow, tokens).is_none() {
                 break;
             }
             let block = match non_terminal!(BlockNode, tokens) {
-                Ok(b) => b,
-                Err(_) => break,
+                Some(b) => b,
+                None => break,
             };
 
             if default.is_some() {
                 tokens.revert_transaction();
-                return Err(Error::UnreachableSwitchCase(value.token().clone().into_owned()));
+                return error_node!(Error::UnreachableSwitchCase(value.token().clone().into_owned()));
             } else {
                 tokens.apply_transaction();
                 match value {
@@ -186,7 +186,7 @@ define_node!(SwitchNode(
 
         token = token.child(Rule::SwitchExpr, token.span().start .. terminal!(RBrace, tokens)?.span().end);
         tokens.apply_transaction();
-        Ok(Self { expr, cases, default, token }.into_node())
+        Some(Self { expr, cases, default, token }.into_node())
     }
 
     into_node(this) {

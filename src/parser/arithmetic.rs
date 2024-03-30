@@ -5,7 +5,7 @@ pratt_node!(ArithmeticInfixExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'sou
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::ArithmethicInfixExpr);
         let op = op.token().rule();
-        Ok(Self { lhs, op, rhs, token }.into_node())
+        Some(Self { lhs, op, rhs, token }.into_node())
     }
 
     into_node(this) {
@@ -26,7 +26,7 @@ pratt_node!(ArithmeticPrefixExprNode(rhs: Node<'source>, op: Rule) {
     build(token, rhs, op) {
         token.set_rule(Rule::ArithmeticPrefixExpr);
         let op = op.token().rule();
-        Ok(Self { rhs, op, token }.into_node())
+        Some(Self { rhs, op, token }.into_node())
     }
 
     into_node(this) {
@@ -46,7 +46,7 @@ pratt_node!(ArithmeticPostfixExprNode(lhs: Node<'source>, op: Rule) {
     build(token, lhs, op) {
         token.set_rule(Rule::ArithmeticPostfixExpr);
         let op = op.token().rule();
-        Ok(Self { lhs, op, token }.into_node())
+        Some(Self { lhs, op, token }.into_node())
     }
 
     into_node(this) {

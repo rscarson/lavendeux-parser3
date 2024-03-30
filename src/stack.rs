@@ -114,33 +114,29 @@ impl<'source> Stack<'source> {
     }
 
     /// Return a token, or error
-    pub fn try_pop_a(&mut self, rules: &[Rule]) -> Result<Token<'source>, Error> {
+    pub fn try_pop_a(&mut self, rules: &[Rule]) -> Option<Token<'source>> {
         self.try_update_error_pos(rules);
 
         if let Some(t) = self.peek() {
             if t.is_a(rules) {
-                return Ok(self.pop().unwrap());
-            } else if t.rule() == Rule::Error {
-                return Err(Error::UnrecognizedToken(self.pop().unwrap().into_owned()));
+                return Some(self.pop().unwrap());
             }
         }
 
         self.revert_transaction();
-        Err(self.emit_err())
+        None
     }
 
     /// Return a token, or error
-    pub fn try_peek_a(&mut self, rules: &[Rule]) -> Result<&Token<'source>, Error> {
+    pub fn try_peek_a(&mut self, rules: &[Rule]) -> Option<&Token<'source>> {
         self.try_update_error_pos(rules);
         if let Some(t) = self.peek() {
             if t.is_a(rules) {
-                return Ok(t);
-            } else if t.rule() == Rule::Error {
-                return Err(Error::UnrecognizedToken(t.clone().into_owned()));
+                return Some(t);
             }
         }
 
-        Err(self.emit_err())
+        None
     }
 
     /// Apply pending changes to the stack

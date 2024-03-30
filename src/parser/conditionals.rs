@@ -31,12 +31,12 @@ define_node!(IfNode(
                 token.include_span(block.token().span());
                 block
             }
-            None => return Err(Error::MissingElse(token.into_owned()))
+            None => return error_node!(Error::MissingElse(token.into_owned()))
         };
 
 
         tokens.apply_transaction();
-        Ok(Self { condition, then_block, else_block, token }.into_node())
+        Some(Self { condition, then_block, else_block, token }.into_node())
     }
 
     into_node(this) {
@@ -56,7 +56,7 @@ define_node!(IfNode(
 pratt_node_silent!(TernaryExprNode {
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::TernaryExpr);
-        Ok(IfNode {
+        Some(IfNode {
             condition: lhs,
             then_block: if let Node::InfixOperator(op) = op { op.inner.unwrap() } else {
                 unreachable!("Invalid operator: {:?}", op)

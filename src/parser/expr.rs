@@ -31,8 +31,8 @@ node_silent!(ExpressionNode(tokens) {
 
         skip_eol!(tokens);
         match non_terminal!(InfixOperatorNode, tokens) {
-            Ok(t) => group.push(t),
-            Err(_) => break
+            Some(t) => group.push(t),
+            None => break
         }
         if let Some(n) = non_terminal!(PrefixOperatorNode?, tokens) {
             group.push(n);
@@ -40,8 +40,8 @@ node_silent!(ExpressionNode(tokens) {
 
         skip_eol!(tokens);
         match non_terminal!(TermNode, tokens) {
-            Ok(t) => group.push(t),
-            Err(_) => break
+            Some(t) => group.push(t),
+            None => break
         }
 
         group.extend(non_terminal!(PostfixOperatorNode*, tokens));
@@ -53,7 +53,7 @@ node_silent!(ExpressionNode(tokens) {
     if expr.len() == 1 {
         // Just a single term
         tokens.apply_transaction();
-        return Ok(expr.pop().unwrap());
+        return Some(expr.pop().unwrap());
     }
 
     tokens.apply_transaction();
@@ -71,7 +71,7 @@ node_silent!(TermNode(tokens) {
         terminal!(RParen, tokens)?;
 
         tokens.apply_transaction();
-        Ok(expr)
+        Some(expr)
     } else {
         let t = non_terminal!(
             LiteralStringNode|LiteralIdentNode|LiteralCurrencyNode|LiteralDecimalNode|LiteralFloatNode|LiteralBoolNode|LiteralConstNode
@@ -82,7 +82,7 @@ node_silent!(TermNode(tokens) {
         , tokens)?;
 
         tokens.apply_transaction();
-        Ok(t)
+        Some(t)
     }
 });
 
@@ -115,7 +115,7 @@ define_node!(InfixOperatorNode(inner: Option<Node<'source>>) {
         }
 
         tokens.apply_transaction();
-        Ok(Self { inner, token }.into_node())
+        Some(Self { inner, token }.into_node())
     }
 
     into_node(this) {
@@ -149,7 +149,7 @@ define_node!(PrefixOperatorNode() {
         }
 
         tokens.apply_transaction();
-        Ok(Node::PrefixOperator(Box::new(Self { token })))
+        Some(Node::PrefixOperator(Box::new(Self { token })))
     }
 
     into_node(this) {
@@ -174,7 +174,7 @@ node_silent!(PostfixOperatorNode(tokens) {
     tokens)?;
 
     tokens.apply_transaction();
-    Ok(operator)
+    Some(operator)
 });
 
 define_node!(PostfixIncDecOperatorNode() {
@@ -189,7 +189,7 @@ define_node!(PostfixIncDecOperatorNode() {
         }
 
         tokens.apply_transaction();
-        Ok(Node::PostfixIncDecOperator(Box::new(Self { token })))
+        Some(Node::PostfixIncDecOperator(Box::new(Self { token })))
     }
 
     into_node(this) {
@@ -220,7 +220,7 @@ define_node!(PostfixFnCallOperatorNode(
 
             skip_eol!(tokens);
             match terminal!(Dot, tokens) {
-                Ok(dot) => {
+                Some(dot) => {
                     token = Some(dot);
                 },
                 _ => {
@@ -230,7 +230,7 @@ define_node!(PostfixFnCallOperatorNode(
 
             skip_eol!(tokens);
             match terminal!(LiteralIdent, tokens) {
-                Ok(name) => {
+                Some(name) => {
                     skip_eol!(tokens);
                     name_span = Some(name.span());
                 },
@@ -244,14 +244,14 @@ define_node!(PostfixFnCallOperatorNode(
 
         // "(" ~ EOL*
         match terminal!(LParen, tokens) {
-            Ok(t) => {
+            Some(t) => {
                 let mut t = t.child(Rule::FnCallOperator, t.span());
                 if let Some(token) = token {
                     t.include_span(token.span());
                 }
                 token = Some(t);
             },
-            Err(e) => return Err(e)
+            None => return None
         }
         skip_eol!(tokens);
         let mut token = token.unwrap();
@@ -261,14 +261,14 @@ define_node!(PostfixFnCallOperatorNode(
             tokens.start_transaction();
 
             match non_terminal!(ExpressionNode, tokens) {
-                Ok(expr) => args.push(expr),
-                Err(_) => {
+                Some(expr) => args.push(expr),
+                None => {
                     break;
                 }
             }
 
             skip_eol!(tokens);
-            if terminal!(Comma, tokens).is_err() {
+            if terminal!(Comma, tokens).is_none() {
                 args.pop();
                 break;
             }
@@ -286,7 +286,7 @@ define_node!(PostfixFnCallOperatorNode(
         token.include_span(terminal!(RParen, tokens)?.span());
 
         tokens.apply_transaction();
-        Ok(Self { name_span, args, token }.into_node())
+        Some(Self { name_span, args, token }.into_node())
     }
 
     into_node(this) {
@@ -311,17 +311,14 @@ define_node!(PostfixIndexingOperatorNode(path: Vec<Option<Node<'source>>>) {
         let mut start = 0..0;
         let mut end = 0..0;
 
-        let mut last_err = None;
-
         let token = tokens.peek().cloned();
 
         loop {
             tokens.start_transaction();
 
             match terminal!(LBrack, tokens) {
-                Ok(b) => end = b.span(),
-                Err(e) => {
-                    last_err = Some(e);
+                Some(b) => end = b.span(),
+                None => {
                     break;
                 }
             }
@@ -331,9 +328,8 @@ define_node!(PostfixIndexingOperatorNode(path: Vec<Option<Node<'source>>>) {
             skip_eol!(tokens);
 
             match terminal!(RBrack, tokens) {
-                Ok(b) => start = b.span(),
-                Err(e) => {
-                    last_err = Some(e);
+                Some(b) => start = b.span(),
+                None => {
                     break;
                 }
             }
@@ -345,7 +341,7 @@ define_node!(PostfixIndexingOperatorNode(path: Vec<Option<Node<'source>>>) {
         // [ ... ]+
         if path.len() == 0 {
             tokens.revert_transaction();
-            return Err(last_err.unwrap());
+            return None;
         }
 
         let token = match token {
@@ -356,12 +352,12 @@ define_node!(PostfixIndexingOperatorNode(path: Vec<Option<Node<'source>>>) {
             },
             None => {
                 tokens.revert_transaction();
-                return Err(tokens.emit_err());
+                return None;
             }
         };
 
         tokens.apply_transaction();
-        Ok(Self { path, token }.into_node())
+        Some(Self { path, token }.into_node())
     }
 
     into_node(this) {

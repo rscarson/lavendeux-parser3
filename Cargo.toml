@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = []
+default = ["debug_compiler_internal"]
 debug_compiler_internal = []
 
 [profile.release]
