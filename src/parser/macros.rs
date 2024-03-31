@@ -131,11 +131,13 @@ macro_rules! error_node {
 macro_rules! define_node {
     (
         $name:ident ( $($an:ident : $at:ty),* $(,)?) {
+            $($docstr:literal)*
             build($bstack_arg:ident) $bblock:block
             into_node($nselfarg:ident) $nblock:block
             into_owned($oselfarg:ident) $oblock:block
         }
     ) => {
+        $(#[doc = $docstr])*
         #[derive(Clone, Debug)]
         pub struct $name<'source> {
             $(pub $an: $at,)*
@@ -161,11 +163,13 @@ macro_rules! define_node {
 macro_rules! pratt_node {
     (
         $name:ident ( $($an:ident : $at:ty),* $(,)?) {
+            $($docstr:literal)*
             build($bt_arg:ident, $bl_arg:ident, $bo_arg:ident $(, $br_arg:ident)?) $bblock:block
             into_node($nselfarg:ident) $nblock:block
             into_owned($oselfarg:ident) $oblock:block
         }
     ) => {
+        $(#[doc = $docstr])*
         #[derive(Clone, Debug)]
         pub struct $name<'source> {
             $(pub $an: $at,)*
@@ -191,9 +195,11 @@ macro_rules! pratt_node {
 macro_rules! pratt_node_silent {
     (
         $name:ident {
+            $($docstr:literal)*
             build($bt_arg:ident, $bl_arg:ident, $bo_arg:ident $(, $br_arg:ident)?) $bblock:block
         }
     ) => {
+        $(#[doc = $docstr])*
         #[derive(Clone, Debug)]
         pub struct $name { }
         impl $name {
@@ -204,10 +210,14 @@ macro_rules! pratt_node_silent {
 
 macro_rules! node_silent {
     (
-        $name:ident($bstack_arg:ident) $bblock:block
+        $name:ident {
+            $($docstr:literal)*
+            build($bstack_arg:ident) $bblock:block
+        }
     ) => {
         define_node!(
             $name() {
+                $($docstr)*
                 build($bstack_arg) $bblock
                 into_node(_this) {
                     unimplemented!("Node {} cannot be built directly", stringify!($name));

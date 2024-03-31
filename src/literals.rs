@@ -41,32 +41,47 @@ pub fn float(slice: &str) -> Result<f64, LiteralError> {
 }
 
 pub fn string(slice: &str) -> Result<String, LiteralError> {
-    let slice = slice[1..slice.len() - 1].chars();
+    let mut slice = slice[1..slice.len() - 1].chars();
     let mut output = String::new();
-    let mut escape = false;
-    for c in slice {
-        if escape {
-            match c {
-                '\'' => output.push('\''),
-                '"' => output.push('"'),
-                '\\' => output.push('\\'),
-                'n' => output.push('\n'),
-                'r' => output.push('\r'),
-                't' => output.push('\t'),
-                _ => return Err(LiteralError::InvalidEscapeSequence(c)),
-            }
-            escape = false;
-        } else {
-            match c {
-                '\\' => escape = true,
-                _ => output.push(c),
-            }
+
+    loop {
+        let c = match slice.next() {
+            Some(c) => c,
+            None => break,
+        };
+
+        match c {
+            '\\' => match slice.next() {
+                Some(c) => match c {
+                    '\'' => output.push('\''),
+                    '"' => output.push('"'),
+                    '\\' => output.push('\\'),
+                    'n' => output.push('\n'),
+                    'r' => output.push('\r'),
+                    't' => output.push('\t'),
+                    'u' => {
+                        let mut code = String::new();
+                        for _ in 0..4 {
+                            match slice.next() {
+                                Some(c) => code.push(c),
+                                None => return Err(LiteralError::InvalidEscapeSequence('\\')),
+                            }
+                        }
+                        let code = u32::from_str_radix(&code, 16)
+                            .map_err(|_| LiteralError::InvalidEscapeSequence('\\'))?;
+                        output.push(
+                            std::char::from_u32(code)
+                                .ok_or(LiteralError::InvalidEscapeSequence('\\'))?,
+                        );
+                    }
+                    _ => return Err(LiteralError::InvalidEscapeSequence(c)),
+                },
+                None => return Err(LiteralError::InvalidEscapeSequence('\\')),
+            },
+
+            _ => output.push(c),
         }
     }
 
-    if escape {
-        Err(LiteralError::InvalidEscapeSequence('\\'))
-    } else {
-        Ok(output)
-    }
+    Ok(output)
 }

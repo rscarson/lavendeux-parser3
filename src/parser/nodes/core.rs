@@ -46,14 +46,16 @@ define_node!(ScriptNode(lines: Vec<Node<'source>>) {
 });
 
 // (EXPR | FN_ASSIGNMENT) ~ (EOL | EOI)
-node_silent!(LineNode(tokens) {
-    tokens.start_transaction();
+node_silent!(LineNode {
+    build(tokens) {
+        tokens.start_transaction();
 
-    let expr = non_terminal!(ExpressionNode|FnAssignNode, tokens)?;
-    terminal!(EOI|EOL+, tokens)?;
+        let expr = non_terminal!(ExpressionNode|FnAssignNode, tokens)?;
+        terminal!(EOI|EOL+, tokens)?;
 
-    tokens.apply_transaction();
-    Some(expr)
+        tokens.apply_transaction();
+        Some(expr)
+    }
 });
 
 // "{" ~ LINE* ~ EXPR? ~ "}" | EXPR

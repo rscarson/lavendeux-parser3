@@ -4,86 +4,86 @@ use crate::{
     IntoOwned,
 };
 
-node_silent!(InfixExpressionNode(tokens) {
-    ExpressionNode::parse(tokens)
-});
-
 // prefix_op? ~ EOL* ~ TERM ~ postfix_operation* ~ ( EOL* ~ infix_op ~ prefix_op? ~ EOL* ~ TERM ~ postfix_operation*)*
-node_silent!(ExpressionNode(tokens) {
-    tokens.start_transaction();
-
-    let mut expr = vec![];
-
-    // prefix_op? ~ EOL* ~ TERM ~ postfix_operation*
-    if let Some(n) = non_terminal!(PrefixOperatorNode?, tokens) {
-        expr.push(n);
-    }
-    skip_eol!(tokens);
-    expr.push(non_terminal!(TermNode, tokens)?);
-
-    expr.extend(non_terminal!(PostfixOperatorNode*, tokens));
-
-    // ( EOL* ~ infix_op ~ prefix_op? ~ EOL* ~ TERM ~ postfix_operation*)*
-    loop {
+node_silent!(ExpressionNode {
+    build(tokens) {
         tokens.start_transaction();
-        let mut group = vec![];
 
-        skip_eol!(tokens);
-        match non_terminal!(InfixOperatorNode, tokens) {
-            Some(t) => group.push(t),
-            None => break
-        }
+        let mut expr = vec![];
+
+        // prefix_op? ~ EOL* ~ TERM ~ postfix_operation*
         if let Some(n) = non_terminal!(PrefixOperatorNode?, tokens) {
-            group.push(n);
+            expr.push(n);
         }
-
         skip_eol!(tokens);
-        match non_terminal!(TermNode, tokens) {
-            Some(t) => group.push(t),
-            None => break
+        expr.push(non_terminal!(TermNode, tokens)?);
+
+        expr.extend(non_terminal!(PostfixOperatorNode*, tokens));
+
+        // ( EOL* ~ infix_op ~ prefix_op? ~ EOL* ~ TERM ~ postfix_operation*)*
+        loop {
+            tokens.start_transaction();
+            let mut group = vec![];
+
+            skip_eol!(tokens);
+            match non_terminal!(InfixOperatorNode, tokens) {
+                Some(t) => group.push(t),
+                None => break
+            }
+            if let Some(n) = non_terminal!(PrefixOperatorNode?, tokens) {
+                group.push(n);
+            }
+
+            skip_eol!(tokens);
+            match non_terminal!(TermNode, tokens) {
+                Some(t) => group.push(t),
+                None => break
+            }
+
+            group.extend(non_terminal!(PostfixOperatorNode*, tokens));
+
+            tokens.apply_transaction();
+            expr.extend(group.drain(0..))
         }
 
-        group.extend(non_terminal!(PostfixOperatorNode*, tokens));
+        if expr.len() == 1 {
+            // Just a single term
+            tokens.apply_transaction();
+            return Some(expr.pop().unwrap());
+        }
 
         tokens.apply_transaction();
-        expr.extend(group.drain(0..))
+        expr.reverse(); // pratt expects the expression to be in reverse order
+        crate::parser::pratt::fold_expression(&mut expr, u8::MAX)
     }
-
-    if expr.len() == 1 {
-        // Just a single term
-        tokens.apply_transaction();
-        return Some(expr.pop().unwrap());
-    }
-
-    tokens.apply_transaction();
-    expr.reverse(); // pratt expects the expression to be in reverse order
-    crate::parser::pratt::fold_expression(&mut expr, u8::MAX)
 });
 
 // "(" ~ EXPR ~ ")" | Array | Object | SKIP_KEYWORD | BREAK_EXPRESSION | RETURN_EXPRESSION | FOR_LOOP_EXPRESSION | SWITCH_EXPRESSION | IF_EXPRESSION | Literal
-node_silent!(TermNode(tokens) {
-    tokens.start_transaction();
+node_silent!(TermNode {
+    build(tokens) {
+        tokens.start_transaction();
 
 
-    if let Some(_) = terminal!(LParen?, tokens) {
-        let expr = non_terminal!(ExpressionNode, tokens)?;
-        terminal!(RParen, tokens)?;
+        if let Some(_) = terminal!(LParen?, tokens) {
+            let expr = non_terminal!(ExpressionNode, tokens)?;
+            terminal!(RParen, tokens)?;
 
-        tokens.apply_transaction();
-        Some(expr)
-    } else {
-        let t = non_terminal!(
-            LiteralStringNode|LiteralRegexNode
-            | LiteralIdentNode
-            | LiteralCurrencyNode|LiteralFloatNode|LiteralBoolNode|LiteralConstNode
-            | LiteralIntNode|LiteralRadixNode
-            | ArrayNode|ObjectNode
-            | ContinueNode|BreakNode|ReturnNode
-            | ForNode|SwitchNode|IfNode
-        , tokens)?;
+            tokens.apply_transaction();
+            Some(expr)
+        } else {
+            let t = non_terminal!(
+                LiteralStringNode|LiteralRegexNode
+                | LiteralIdentNode
+                | LiteralCurrencyNode|LiteralFloatNode|LiteralBoolNode|LiteralConstNode
+                | LiteralIntNode|LiteralRadixNode
+                | ArrayNode|ObjectNode
+                | ContinueNode|BreakNode|ReturnNode
+                | ForNode|SwitchNode|IfNode
+            , tokens)?;
 
-        tokens.apply_transaction();
-        Some(t)
+            tokens.apply_transaction();
+            Some(t)
+        }
     }
 });
 
@@ -165,17 +165,19 @@ define_node!(PrefixOperatorNode() {
 });
 
 // PostfixIncDecOperator | PostfixIndexingOperator | PostfixDecoratorOperator | PostfixFnCallOperator
-node_silent!(PostfixOperatorNode(tokens) {
-    tokens.start_transaction();
+node_silent!(PostfixOperatorNode {
+    build(tokens) {
+        tokens.start_transaction();
 
-    let operator = non_terminal!(
-        PostfixIncDecOperatorNode
-        | PostfixIndexingOperatorNode
-        | PostfixFnCallOperatorNode,
-    tokens)?;
+        let operator = non_terminal!(
+            PostfixIncDecOperatorNode
+            | PostfixIndexingOperatorNode
+            | PostfixFnCallOperatorNode,
+        tokens)?;
 
-    tokens.apply_transaction();
-    Some(operator)
+        tokens.apply_transaction();
+        Some(operator)
+    }
 });
 
 define_node!(PostfixIncDecOperatorNode() {

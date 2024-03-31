@@ -2,6 +2,9 @@ use super::*;
 use crate::{lexer::Rule, IntoOwned};
 
 pratt_node!(ArithmeticInfixExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'source>) {
+    "Infix arithmetic expression"
+    "`EXPR (+, -, *, /, %, **) EXPR`"
+
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::ArithmethicInfixExpr);
         let op = op.token().rule();
@@ -23,6 +26,9 @@ pratt_node!(ArithmeticInfixExprNode(lhs: Node<'source>, op: Rule, rhs: Node<'sou
 });
 
 pratt_node!(ArithmeticPrefixExprNode(rhs: Node<'source>, op: Rule) {
+    "Prefix arithmetic expression"
+    "`(++, --, -) EXPR`"
+
     build(token, rhs, op) {
         token.set_rule(Rule::ArithmeticPrefixExpr);
         let op = op.token().rule();
@@ -43,6 +49,9 @@ pratt_node!(ArithmeticPrefixExprNode(rhs: Node<'source>, op: Rule) {
 });
 
 pratt_node!(ArithmeticPostfixExprNode(lhs: Node<'source>, op: Rule) {
+    "Postfix arithmetic expression"
+    "`EXPR (++ | --)`"
+
     build(token, lhs, op) {
         token.set_rule(Rule::ArithmeticPostfixExpr);
         let op = op.token().rule();
