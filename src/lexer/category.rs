@@ -1,10 +1,13 @@
 use super::Rule;
 
+/// Token categories for better error messages
+#[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Category {
     Operator(Vec<Rule>),
     Symbol(Vec<Rule>),
     Keyword(Vec<Rule>),
+    DocBlock,
     Identifier,
     Literal,
     EOL,
@@ -37,14 +40,16 @@ impl std::fmt::Display for Category {
                     .join(", ");
                 write!(f, "Keyword({inner})")
             }
-            Category::Identifier => write!(f, "identifier"),
-            Category::Literal => write!(f, "literal value"),
-            Category::EOL => write!(f, "linebreak"),
-            Category::EOI => write!(f, "end of input"),
+            Category::DocBlock => write!(f, "`documentation block`"),
+            Category::Identifier => write!(f, "`identifier`"),
+            Category::Literal => write!(f, "`literal value`"),
+            Category::EOL => write!(f, "`linebreak`"),
+            Category::EOI => write!(f, "`end of input`"),
         }
     }
 }
 impl Category {
+    /// Convert a rule to a category
     pub fn from_rule(rule: Rule) -> Option<Self> {
         Some(match rule {
             Rule::EOI => Category::EOI,
@@ -75,8 +80,6 @@ impl Category {
             | Rule::AssignXor
             | Rule::AssignSL
             | Rule::AssignSR
-            | Rule::Inc
-            | Rule::Dec
             | Rule::Add
             | Rule::Sub
             | Rule::Pow
@@ -117,7 +120,6 @@ impl Category {
             | Rule::As
             | Rule::Contains
             | Rule::Matches
-            | Rule::Is
             | Rule::StartsWith
             | Rule::EndsWith => Category::Keyword(vec![rule]),
 
@@ -130,17 +132,19 @@ impl Category {
             | Rule::LiteralConstTrue
             | Rule::LiteralConstFalse
             | Rule::LiteralInt
-            | Rule::LiteralRadix
             | Rule::LiteralPrefixedCurrency
             | Rule::LiteralSuffixedCurrency
             | Rule::LiteralFloat
             | Rule::LiteralRegex
             | Rule::LiteralString => Category::Literal,
 
+            Rule::DocBlockComment => Category::DocBlock,
+
             _ => return None,
         })
     }
 
+    /// Convert a list of rules to a list of categories
     pub fn from_ruleset(rules: &[Rule]) -> Vec<Self> {
         let categories = rules
             .iter()
@@ -177,6 +181,7 @@ impl Category {
         categories
     }
 
+    /// Convert a list of categories to a string
     pub fn many_to_string(this: &Vec<Self>) -> String {
         format!(
             "{}",
@@ -187,6 +192,7 @@ impl Category {
         )
     }
 
+    /// Convert a list of rules to a string
     pub fn format_rules(this: &Vec<Rule>) -> String {
         let categories = Category::from_ruleset(this);
         Category::many_to_string(&categories)

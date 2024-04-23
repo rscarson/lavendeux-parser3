@@ -13,9 +13,9 @@
 // Returns true if the condition is met, false otherwise
 __zarban_check_condition(condition): bool = {
     save = global('__zarban_savedata')
-    match condition['type'] {
+    switch condition['type'] {
         // Check a status condition
-        "status" => match condition['operation'] {
+        "status" => switch condition['operation'] {
             "lt" => save['status'][condition['target']]['value'] < condition['value'],
             "lte" => save['status'][condition['target']]['value'] <= condition['value'],
             "eq" => save['status'][condition['target']]['value'] == condition['value'],
@@ -42,7 +42,7 @@ __zarban_check_condition(condition): bool = {
 // Applies an effect to the save data
 __zarban_apply_effect(effect) = {
     save = global('__zarban_savedata')
-    match effect['type'] {
+    switch effect['type'] {
         // Apply a status effect
         "status" => {
             if effect['target'] == 'all' {
@@ -53,7 +53,7 @@ __zarban_apply_effect(effect) = {
                 return nil
             } else {
                 // Apply the effect to a specific status
-                match effect['operation'] {
+                switch effect['operation'] {
                     "set" => save['status'][effect['target']]['value'] = effect['value'],
                     "add" => save['status'][effect['target']]['value'] += effect['value'],
                     "add_max" => save['status'][effect['target']]['maximum'] += effect['value'],
@@ -337,10 +337,10 @@ document_function('zarban', {
 // Zarban decorator
 // Usage: `<choice> @zarban`
 @zarban(choice: int) = zarban(choice)
-document_function('@zarban', {\
-    "category": "Zarban's Grotto",\
-    "description": "Decorator to advance the story",\
-    "examples": "1 @zarban"\
+document_function('@zarban', {
+    "category": "Zarban's Grotto",
+    "description": "Decorator to advance the story",
+    "examples": "1 @zarban"
 })
 
 //

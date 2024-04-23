@@ -1,0 +1,2 @@
+cargo run --bin compiler -- -F -f stdlib/src/math.lav -o stdlib/math.bin --allow-syscalld
+cargo run --bin compiler -- -F -f stdlib/src/system.lav -o stdlib/system.bin --allow-syscalld -d stdlib/math.dbg

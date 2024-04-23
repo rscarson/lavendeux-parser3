@@ -1,5 +1,15 @@
+//! The lexer module for the language
+//! Splits the input into tokens
+//! `Lexer` is the main entry point for the lexer.
+//! `Token` is the main token type.
+//! `Rule` is the set of rules for the lexer.
+//! `Stack` is a token queue with rewind used by the parser.
+use crate::traits::IntoOwned;
 use logos::Logos;
 use std::borrow::Cow;
+
+mod error;
+pub use error::LexerError;
 
 mod stack;
 pub use stack::Stack;
@@ -8,21 +18,21 @@ mod rule;
 pub use rule::Rule;
 
 mod token;
-pub use token::{Token, TokenSpan};
+pub use token::{SerializedToken, Token, TokenSpan};
 
 mod category;
 pub use category::Category;
 
-pub fn lex<'source>(input: &'source str) -> Stack<'source> {
-    Stack::new(Lexer::new(input).all_tokens())
-}
-
+/// A lexer for the language
+/// Splits the input into tokens
 pub struct Lexer<'source>(logos::Lexer<'source, Rule>);
 impl<'source> Lexer<'source> {
+    /// Creates a new lexer from the input
     pub fn new(input: &'source str) -> Self {
         Self(Rule::lexer_with_extras(input, 1))
     }
 
+    /// Consumes and returns the next token
     pub fn consume_next(&mut self) -> Token<'source> {
         let token = self.0.next().unwrap_or_else(|| Ok(Rule::EOI));
         let input = self.0.source();
@@ -34,11 +44,15 @@ impl<'source> Lexer<'source> {
         )
     }
 
-    /// Consumes this iterator, returning all tokens
-    pub fn all_tokens(mut self) -> Vec<Token<'source>> {
+    /// Consumes this iterator, returning all tokens in the input
+    pub fn all_tokens(mut self) -> Result<Vec<Token<'source>>, LexerError> {
         let mut tokens = vec![];
         loop {
             let next = self.consume_next();
+            if next.rule() == Rule::Error {
+                return Err(LexerError::UnrecognizedToken(next.into_owned()));
+            }
+
             match next {
                 t if t.rule() == Rule::EOI => {
                     tokens.push(t);
@@ -49,7 +63,7 @@ impl<'source> Lexer<'source> {
             }
         }
 
-        tokens
+        Ok(tokens)
     }
 }
 
@@ -59,7 +73,7 @@ mod test {
 
     macro_rules! assert_tokens {
         ($input:literal, $tokens:expr) => {{
-            let t = Lexer::new($input).all_tokens();
+            let t = Lexer::new($input).all_tokens().unwrap();
             assert_eq!($tokens, t.into_iter().map(|t| t.rule()).collect::<Vec<_>>());
         }};
     }

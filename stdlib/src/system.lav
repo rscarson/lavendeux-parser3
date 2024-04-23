@@ -1,0 +1,13 @@
+/**
+ * Lavendeux Standard Library
+ * Copyright Richard Carson, 2024
+ * Licensed under the MIT License
+ */
+
+//# category: System
+//# Print a string to the console.
+//# This will also return the string
+//# ```lav
+//# echo("Hello, World!")
+//# 'test'.echo()
+echo(s: string): string = __syscalld(PRNT, s)

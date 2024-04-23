@@ -1,34 +1,20 @@
-use crate::{
-    lexer::{Category, Rule, Token},
-    literals::LiteralError,
-};
-
+/// Error type for the language
+/// Encapsulates all possible errors during lexing, parsing, compiling, and running
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
-    #[error("{0}\n= Syntax error; Unrecognized token")]
-    UnrecognizedToken(Token<'static>),
+    /// Errors during tokenization; Mostly unrecognized tokens
+    #[error("{0}")]
+    Lexer(#[from] crate::lexer::LexerError),
 
-    #[error(
-        "{found}\n= Syntax error; expected one of:\n= {}",
-        Category::format_rules(expected)
-    )]
-    Syntax {
-        expected: Vec<Rule>,
-        found: Token<'static>,
-    },
+    /// Errors during parsing; Syntax errors
+    #[error("{0}")]
+    Parser(#[from] crate::parser::ParserError),
 
-    #[error("{0}\n= Unreachable statement; Put this case before the default case")]
-    UnreachableSwitchCase(Token<'static>),
+    /// Errors during compilation; Fairly uncommon, mostly stdlib issues
+    #[error("{0}")]
+    Compiler(#[from] crate::compiler::CompilerError),
 
-    #[error("{0}\n= Conditionals are required to have an 'else' block.\n= If a value is not needed, use `else nil`")]
-    MissingElse(Token<'static>),
-
-    #[error("{0}\n= Could not assign to constant value")]
-    AssignmentToConstant(Token<'static>),
-
-    #[error("{0}\n= Not the name of a decorator; expected an identifier")]
-    NotADecorator(Token<'static>),
-
-    #[error("{0}\n= {1}")]
-    InvalidLiteral(Token<'static>, LiteralError),
+    /// Errors during execution; Type errors, overflows etc
+    #[error("{0}")]
+    Runtime(#[from] crate::vm::error::RuntimeError),
 }

@@ -1,8 +1,4 @@
-use lavendeux_parser::{
-    lexer::Lexer,
-    lexer::Stack,
-    parser::{self, ParserNode},
-};
+use lavendeux_parser::Lavendeux;
 
 const MIN_STACK_SIZE: usize = 32 * 1024 * 1024;
 
@@ -19,6 +15,7 @@ fn interactive_compiler() {
         stack.insert(0, "exit".to_string());
     }
 
+    let mut lavendeux = Lavendeux::new();
     loop {
         // Make sure we have a command ready
         if stack.is_empty() {
@@ -32,19 +29,13 @@ fn interactive_compiler() {
             break;
         } else {
             // Process the next command
-            let t = std::time::Instant::now();
             let input = cmd.as_str();
-
-            let tokens = Lexer::new(input).all_tokens();
-            println!("{tokens:#?}");
-            let mut tokens = Stack::new(tokens);
-            match parser::core::ScriptNode::parse(&mut tokens) {
-                Some(ast) => {
-                    println!("Time: {:?}", t.elapsed());
-                    println!("{:#?}", ast);
+            match lavendeux.run(input) {
+                Ok(value) => {
+                    println!("=> {:?}", value);
                 }
-                None => {
-                    println!("Error: {}", tokens.emit_err());
+                Err(e) => {
+                    eprintln!("{}", e);
                 }
             }
         }

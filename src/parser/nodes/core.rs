@@ -1,7 +1,10 @@
 use super::*;
 use crate::{
     lexer::{Rule, TokenSpan},
-    IntoOwned,
+    parser::ParserError,
+    traits::IntoOwned,
+    value::ValueType,
+    vm::OpCode,
 };
 
 // LINE*
@@ -33,6 +36,14 @@ define_node!(ScriptNode(lines: Vec<Node<'source>>) {
         Some(Self { lines, token }.into_node())
     }
 
+    compile(this, compiler) {
+        for line in this.lines {
+            line.compile(compiler)?;
+        }
+
+        Ok(())
+    }
+
     into_node(this) {
         Node::Script(Box::new(this))
     }
@@ -50,7 +61,8 @@ node_silent!(LineNode {
     build(tokens) {
         tokens.start_transaction();
 
-        let expr = non_terminal!(ExpressionNode|FnAssignNode, tokens)?;
+        terminal!(EOI|EOL*, tokens);
+        let expr = non_terminal!(FnAssignNode|ExpressionNode, tokens)?;
         terminal!(EOI|EOL+, tokens)?;
 
         tokens.apply_transaction();
@@ -93,6 +105,22 @@ define_node!(BlockNode(lines: Vec<Node<'source>>) {
         }
     }
 
+    compile(this, compiler) {
+        compiler.push_token(this.token);
+        compiler.push(OpCode::SCI); // Block scope
+
+        let len = this.lines.len();
+        for (i, line) in this.lines.into_iter().enumerate() {
+            line.compile(compiler)?;
+            if i < len - 1 {
+                compiler.push(OpCode::POP);
+            }
+        }
+
+        compiler.push(OpCode::SCO); // Block scope
+        Ok(())
+    }
+
     into_node(this) {
         Node::Block(Box::new(this))
     }
@@ -105,10 +133,25 @@ define_node!(BlockNode(lines: Vec<Node<'source>>) {
     }
 });
 
-pratt_node!(CastExprNode(expr: Node<'source>, type_span: TokenSpan) {
+pratt_node!(CastExprNode(expr: Node<'source>, type_name: ValueType) {
     build(token, lhs, _op, rhs) {
         token.set_rule(Rule::CastExpr);
-        Some(Self { expr: lhs, type_span: rhs.token().span(), token }.into_node())
+        let type_name = match ValueType::from_str(rhs.token().slice()) {
+            Some(t) => t,
+            None => {
+                return error_node!(ParserError::CannotCastToType(rhs.token().clone().into_owned()));
+            }
+        };
+        Some(Self { expr: lhs, type_name, token }.into_node())
+    }
+
+    compile(this, compiler) {
+        compiler.push_token(this.token);
+        this.expr.compile(compiler)?;
+        compiler.push(OpCode::CAST);
+        compiler.push_type(this.type_name);
+
+        Ok(())
     }
 
     into_node(this) {
@@ -118,7 +161,7 @@ pratt_node!(CastExprNode(expr: Node<'source>, type_span: TokenSpan) {
     into_owned(this) {
         Self::Owned {
             expr: this.expr.into_owned(),
-            type_span: this.type_span,
+            type_name: this.type_name,
             token: this.token.into_owned()
         }
     }
@@ -128,6 +171,12 @@ pratt_node!(DecoratorExprNode(expr: Node<'source>, name_span: TokenSpan) {
     build(token, lhs, _op, rhs) {
         token.set_rule(Rule::DecoratorExpr);
         Some(Self { expr: lhs, name_span: rhs.token().span(), token }.into_node())
+    }
+
+    compile(_this, _compiler) {
+        todo!()
+        // Validate function dignature
+        // Then normal function call
     }
 
     into_node(this) {

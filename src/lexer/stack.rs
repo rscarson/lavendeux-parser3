@@ -1,7 +1,7 @@
 use crate::{
-    error::Error,
     lexer::{Category, Rule, Token},
-    IntoOwned,
+    parser::ParserError,
+    traits::IntoOwned,
 };
 
 /// Token queue with rewind
@@ -31,38 +31,51 @@ impl<'source> Stack<'source> {
             could_expect: vec![],
         }
     }
+
+    /// Get the current length of the stack
     pub fn len(&self) -> usize {
         *self.cur_len.last().unwrap()
     }
 
+    /// Get the current depth of the stack
     pub fn depth(&self) -> usize {
         self.cur_len.len() - 1
     }
 
+    /// Get the current set of rules we could expect
+    /// used for error reporting
     pub fn expecting(&self) -> Vec<Category> {
         Category::from_ruleset(&self.could_expect)
     }
 
+    /// Get the token at the error position
     pub fn error_token(&self) -> &Token<'source> {
         self.tokens.get(self.error_pos).unwrap()
     }
 
     /// Emit an error with the current state
-    pub fn emit_err(&self) -> Error {
-        Error::Syntax {
+    pub fn emit_err(&self) -> ParserError {
+        ParserError::Syntax {
             expected: self.could_expect.clone(),
             found: self.error_token().clone().into_owned(),
         }
     }
 
     fn try_update_error_pos(&mut self, rules: &[Rule]) {
-        let len = self.len();
-        if self.error_pos > len && len > 0 {
-            self.error_pos = len - 1;
-            self.could_expect.clear();
+        if self.len() == 0 {
+            return;
         }
 
-        if self.error_pos + 1 == len {
+        let pos = self.len() - 1; // Index of the next token being checked
+
+        if pos < self.error_pos {
+            // We moved past the error position
+            // Update pos and clear the expected rules
+            self.error_pos = pos;
+            self.could_expect.clear();
+        } else if self.error_pos == pos {
+            // We are still at the error position
+            // Add the current rules to the expected rules at this position
             self.could_expect.extend(rules);
         }
     }

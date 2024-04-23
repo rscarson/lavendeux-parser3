@@ -1,7 +1,14 @@
 use logos::{Logos, Skip};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Logos)]
-#[logos(skip r"[ \t\r\f]+|(\\\n)+")]
+use crate::traits::SerializeToBytes;
+
+/// Main lexer rule set for the language
+#[allow(missing_docs)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Logos, Serialize, Deserialize,
+)]
+#[logos(skip r"[ \t\r\f]+")]
 #[logos(subpattern currency_symbol = r"[$¢£¤¥֏؋߾߿৲৳৻૱௹฿៛₠₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿꠸﷼﹩＄￠￡￥￦]")]
 #[logos(extras = usize)]
 #[repr(u16)]
@@ -9,6 +16,16 @@ use logos::{Logos, Skip};
 pub enum Rule {
     #[strum(to_string = "end of input")]
     EOI,
+
+    #[token("\\\n", callback = |lex| {
+        lex.extras += 1;
+        Skip
+    })]
+    #[token("\\\r\n", callback = |lex| {
+        lex.extras += 1;
+        Skip
+    })]
+    SkippedEOL,
 
     Script,
     Block,
@@ -28,10 +45,6 @@ pub enum Rule {
     AssignBitwiseExpr,
 
     PrefixNeg,
-    PrefixInc,
-    PostfixInc,
-    PrefixDec,
-    PostfixDec,
     IndexingOperator,
     DecoratorOperator,
     FnCallOperator,
@@ -64,7 +77,8 @@ pub enum Rule {
     // Symbols
     //
     #[strum(to_string = "end of line")]
-    #[regex("\n|;", |l| {l.extras += 1})]
+    #[regex("\n", |l| {l.extras += 1})]
+    #[regex(";")]
     EOL,
 
     #[strum(to_string = "(")]
@@ -154,6 +168,8 @@ pub enum Rule {
     AssignSR,
 
     // Comments
+    #[regex(r"//#[^\n]*")]
+    DocBlockComment,
     #[regex(r"//[^\n]*", |_| Skip)]
     LineComment,
     #[regex(r"/\*([^*]|\*[^/])*\*/", |lex| {
@@ -170,12 +186,6 @@ pub enum Rule {
     BlockComment,
 
     // Arithmetic operators
-    #[strum(to_string = "++")]
-    #[token("++")]
-    Inc,
-    #[strum(to_string = "--")]
-    #[token("--")]
-    Dec,
     #[strum(to_string = "+")]
     #[token("+")]
     Add,
@@ -305,9 +315,6 @@ pub enum Rule {
     #[strum(to_string = "matches")]
     #[token("matches")]
     Matches,
-    #[strum(to_string = "is")]
-    #[token("is")]
-    Is,
     #[strum(to_string = "starts_with")]
     #[regex("starts_with|startswith")]
     StartsWith,
@@ -334,27 +341,60 @@ pub enum Rule {
     #[regex(r"[a-zA-Z_][0-9A-Za-z_]*", priority = 1)]
     LiteralIdent,
 
-    #[regex(r"[0-9](\d|_)*")]
-    LiteralInt,
-
     #[regex(r"0[a-zA-Z][a-zA-Z0-9]+")]
     LiteralRadix,
 
-    #[regex(r"(([1-9](?:\d|_)*(\.(?:\d|_)+)?)|(\.(?:\d|_)+))((?&currency_symbol)|[ddfF])")]
+    #[regex(r"[0-9](\d|_)*", priority = 2)]
+    LiteralInt,
+
+    #[regex(
+        r"(([1-9](?:\d|_)*(\.(?:\d|_)+)?)|(\.(?:\d|_)+))((?&currency_symbol))",
+        priority = 3
+    )]
     LiteralSuffixedCurrency,
 
-    #[regex(r"(?&currency_symbol)(([1-9](?:\d|_)*(\.(?:\d|_)+)?)|(\.(?:\d|_)+))")]
+    #[regex(
+        r"(?&currency_symbol)(([1-9](?:\d|_)*(\.(?:\d|_)+)?)|(\.(?:\d|_)+))",
+        priority = 3
+    )]
     LiteralPrefixedCurrency,
 
-    #[regex(r"(?:(([1-9](?:\d|_)*(\.(?:\d|_)+))|(\.(?:\d|_)+)))(?:[eE][+-]?\d+)?")]
+    #[regex(
+        r"(?:(([0-9](?:\d|_)*(\.(?:\d|_)+))|(\.(?:\d|_)+)))(?:[eE][+-]?\d+)?",
+        priority = 3
+    )]
     LiteralFloat,
 
-    #[regex(r#"(?:/(?:\\.|[^\\/])+/[a-zA-Z]*)"#)] // Regex literal
+    #[regex(r#"r"([^"\\]+|\\.)*"[a-zA-Z]*"#, priority = 1)] // Regex literal "
+    #[regex(r#"r'([^'\\]+|\\.)*'[a-zA-Z]*"#, priority = 1)] // Regex literal '
     LiteralRegex,
 
-    #[regex(r#"'([^'\\]|\\.)*'"#)] // ' string literal '
-    #[regex(r#""([^"\\]|\\.)*""#)] // " string literal "
+    #[regex(r#""([^"\\]+|\\.)*""#)] // " string literal "
+    #[regex(r#"'([^'\\]+|\\.)*'"#)] // " string literal '
     LiteralString,
 
     Error,
+}
+
+impl SerializeToBytes for Rule {
+    fn serialize_into_bytes(self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(self as u16).serialize_into_bytes());
+        bytes
+    }
+
+    fn deserialize_from_bytes(
+        bytes: &mut impl Iterator<Item = u8>,
+    ) -> Result<Self, crate::traits::ByteDecodeError> {
+        let rule = u16::deserialize_from_bytes(bytes)?;
+        if rule > Rule::Error as u16 {
+            return Err(crate::traits::ByteDecodeError::MalformedData(format!(
+                "Bad RuleID: {}",
+                rule
+            )));
+        }
+
+        let rule = unsafe { std::mem::transmute::<u16, Rule>(rule) };
+        Ok(rule)
+    }
 }

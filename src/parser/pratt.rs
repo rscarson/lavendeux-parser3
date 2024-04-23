@@ -55,7 +55,7 @@ macro_rules! bind {
 /// It will attempt to create an AST from the expression
 pub fn fold_expression<'source>(
     expr: &mut Vec<Node<'source>>,
-    max_bp: u8,
+    min_bp: u8,
 ) -> Option<Node<'source>> {
     // Get the left hand side of the expression
     // It's either a term or a prefix operator
@@ -93,7 +93,7 @@ pub fn fold_expression<'source>(
         match (left_bp, right_bp) {
             (0, right_bp) => {
                 // Postfix
-                if right_bp > max_bp {
+                if right_bp < min_bp {
                     break;
                 }
                 let op = expr.pop().unwrap();
@@ -107,7 +107,7 @@ pub fn fold_expression<'source>(
             _ => { /* Do nothing - infix */ }
         }
 
-        if left_bp > max_bp {
+        if left_bp < min_bp {
             break;
         }
 
@@ -139,9 +139,7 @@ pub fn build_pratt_binary<'source>(
         Eq | Ne | SEq | SNe | Lt | Gt | Le | Ge => ComparisonExprNode::parse(token, lhs, op, rhs),
         LogicalAnd | LogicalOr => LogicalExprNode::parse(token, lhs, op, rhs),
 
-        Matches | Contains | Is | StartsWith | EndsWith => {
-            MatchExprNode::parse(token, lhs, op, rhs)
-        }
+        Matches | Contains | StartsWith | EndsWith => MatchExprNode::parse(token, lhs, op, rhs),
 
         Range => RangeExprNode::parse(token, lhs, op, rhs),
 
@@ -171,11 +169,10 @@ pub fn build_pratt_unary<'source>(term: Node<'source>, op: Node<'source>) -> Opt
     match op.token().rule() {
         Delete => DeleteExprNode::parse(token, term, op),
 
-        PrefixNeg | PrefixInc | PrefixDec => ArithmeticPrefixExprNode::parse(token, term, op),
+        PrefixNeg => ArithmeticPrefixExprNode::parse(token, term, op),
         LogicalNot => LogicalNotNode::parse(token, term, op),
         BitwiseNot => BitwiseNotNode::parse(token, term, op),
 
-        PostfixInc | PostfixDec => ArithmeticPostfixExprNode::parse(token, term, op),
         FnCallOperator => FnCallNode::parse(token, term, op),
         IndexingOperator => IndexingExprNode::parse(token, term, op),
 
@@ -209,7 +206,7 @@ lazy_static! {
         bind!(LogicalOr => Infix::Left, map::cur);
         bind!(LogicalAnd => Infix::Left, map::cur);
 
-        bind!(Matches|Contains|Is|StartsWith|EndsWith => Infix::Left, map::cur);
+        bind!(Matches|Contains|StartsWith|EndsWith => Infix::Left, map::cur);
 
         bind!(BitwiseOr => Infix::Left, map::cur);
         bind!(Xor => Infix::Left, map::cur);
@@ -224,8 +221,8 @@ lazy_static! {
         bind!(Mul|Div|Mod => Infix::Left, map::cur);
         bind!(Pow => Infix::Right, map::cur);
 
-        bind!(PrefixNeg|PrefixInc|PrefixDec|BitwiseNot|LogicalNot => Prefix, map::cur);
-        bind!(PostfixInc|PostfixDec|FnCallOperator|IndexingOperator => Postfix, map::cur);
+        bind!(PrefixNeg|BitwiseNot|LogicalNot => Prefix, map::cur);
+        bind!(FnCallOperator|IndexingOperator => Postfix, map::cur);
 
         bind!(As => Infix::Right, map::cur);
 

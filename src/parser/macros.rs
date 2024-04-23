@@ -1,22 +1,41 @@
+/// Skip all EOL tokens
+macro_rules! skip_eol {
+    ($tokens:expr) => {
+        terminal!(EOL*, $tokens)
+    };
+}
+
 /// Attempt to match a single token
 macro_rules! terminal {
-    (& $type:ident $(| $($subtype:ident)|+)?, $tokens:expr) => {
+    (& $type:ident $(| $($subtype:ident)|+)?, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         $tokens.try_peek_a(&[$crate::lexer::Rule::$type $(, $($crate::lexer::Rule::$subtype,)+)?]).cloned()
-    };
-    ($type:ident $(| $($subtype:ident)|+)? ?, $tokens:expr) => {
+    }};
+    ($type:ident $(| $($subtype:ident)|+)? ?, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         match terminal!(&$type $(| $($subtype)|+)?, $tokens) {
             Some(_) => $tokens.pop(),
             None => None
         }
-    };
-    ($type:ident $(| $($subtype:ident)|+)? *, $tokens:expr) => {{
+    }};
+    ($type:ident $(| $($subtype:ident)|+)? *, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         let mut v = Vec::new();
         while let Some(t) = terminal!($type$(| $($subtype)|+)? ?, $tokens) {
             v.push(t)
         }
         v
     }};
-    ($type:ident $(| $($subtype:ident)|+)? +, $tokens:expr) => {
+    ($type:ident $(| $($subtype:ident)|+)? +, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         match terminal!($type $(| $($subtype)|+)?, $tokens) {
             Some(t) => {
                 let mut v = vec![t];
@@ -27,17 +46,13 @@ macro_rules! terminal {
             }
             None => None
         }
-    };
-    ($type:ident $(| $($subtype:ident)|+)?, $tokens:expr) => {
+    }};
+    ($type:ident $(| $($subtype:ident)|+)?, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         $tokens.try_pop_a(&[$crate::lexer::Rule::$type $(, $($crate::lexer::Rule::$subtype,)+)?])
-    };
-}
-
-/// Skip all EOL tokens
-macro_rules! skip_eol {
-    ($tokens:expr) => {
-        terminal!(EOL*, $tokens)
-    };
+    }};
 }
 
 macro_rules! build_nt {
@@ -46,12 +61,26 @@ macro_rules! build_nt {
             true => None,
             _ => {
                 #[cfg(feature = "debug_compiler_internal")]
-                println!(
-                    "{}Parsing {}: next={:?}",
-                    "  ".repeat($tokens.depth()),
-                    stringify!($type),
-                    $tokens.peek()
-                );
+                {
+                    println!(
+                        "{}Parsing {}: next={:?}",
+                        " ".repeat($tokens.depth()),
+                        stringify!($type),
+                        $tokens.peek()
+                    );
+                    match $type::parse($tokens) {
+                        Some(t) => {
+                            println!(
+                                "{}Success ({:?})!",
+                                " ".repeat($tokens.depth() + 1),
+                                stringify!($type)
+                            );
+                            Some(t)
+                        }
+                        None => None,
+                    }
+                }
+                #[cfg(not(feature = "debug_compiler_internal"))]
                 $type::parse($tokens)
             }
         }
@@ -60,7 +89,10 @@ macro_rules! build_nt {
 
 /// Attempt to match a NT
 macro_rules! non_terminal {
-    (! $type:ident, $tokens:expr) => {{
+    (! $type:ident, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         match non_terminal!($type?, $tokens) {
             None => Ok(()),
             Some(nt) => Err(Error::Syntax {
@@ -69,17 +101,26 @@ macro_rules! non_terminal {
             })
         }
     }};
-    ($type:ident ?, $tokens:expr) => {
+    ($type:ident ?, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         build_nt!($type, $tokens)
-    };
-    ($type:ident *, $tokens:expr) => {{
+    }};
+    ($type:ident *, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         let mut v = Vec::new();
         while let Some(t) = non_terminal!($type?, $tokens) {
             v.push(t)
         }
         v
     }};
-    ($type:ident +, $tokens:expr) => {
+    ($type:ident +, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         match non_terminal!($type, $tokens) {
             Ok(t) => {
                 let mut v = vec![t];
@@ -90,36 +131,35 @@ macro_rules! non_terminal {
             }
             Err(e) =>  Err(e)
         }
-    };
-    ($type:ident  $(| $($subtype:ident)|+)?, $tokens:expr) => {
+    }};
+    ($type:ident  $(| $($subtype:ident)|+)?, $tokens:expr $(, $skip_eol:expr)?) => {{
+        $(
+            $skip_eol;
+        )?
         match build_nt!($type, $tokens) {
             Some(t) => Some(t),
             None => {
+                #[allow(unused_mut)]
+                let mut result = None;
                 $(
-                    let mut result = None;
-                    'block: {
-                        $(
-                            match build_nt!($subtype, $tokens) {
-                                Some(t) => {
-                                    result = Some(t);
-                                    break 'block;
-                                },
-                                None => {}
-                            }
-                        )+
-                    }
-
-                    if result.is_none() {
-                        $tokens.revert_transaction();
-                    }
-                    return result;
+                    'block: { $(
+                        match build_nt!($subtype, $tokens) {
+                            Some(t) => {
+                                result = Some(t);
+                                break 'block;
+                            },
+                            _ => {}
+                        }
+                    )+ }
                 )?
 
-                #[allow(unreachable_code)]
-                None
+                if result.is_none() {
+                    $tokens.revert_transaction();
+                }
+                result
             }
         }
-    };
+    }};
 }
 
 macro_rules! error_node {
@@ -133,6 +173,7 @@ macro_rules! define_node {
         $name:ident ( $($an:ident : $at:ty),* $(,)?) {
             $($docstr:literal)*
             build($bstack_arg:ident) $bblock:block
+            compile($cselfarg:ident, $ccompilerarg:ident) $cblock:block
             into_node($nselfarg:ident) $nblock:block
             into_owned($oselfarg:ident) $oblock:block
         }
@@ -156,6 +197,11 @@ macro_rules! define_node {
                 $nblock
             }
             fn parse($bstack_arg: &mut $crate::lexer::Stack<'source>) -> Option<$crate::parser::Node<'source>> $bblock
+
+            fn compile(self, $ccompilerarg: &mut $crate::compiler::Compiler<'source>) -> Result<(), $crate::compiler::CompilerError> {
+                let $cselfarg = self;
+                $cblock
+            }
         }
     };
 }
@@ -165,6 +211,7 @@ macro_rules! pratt_node {
         $name:ident ( $($an:ident : $at:ty),* $(,)?) {
             $($docstr:literal)*
             build($bt_arg:ident, $bl_arg:ident, $bo_arg:ident $(, $br_arg:ident)?) $bblock:block
+            compile($cselfarg:ident, $ccompilerarg:ident) $cblock:block
             into_node($nselfarg:ident) $nblock:block
             into_owned($oselfarg:ident) $oblock:block
         }
@@ -187,7 +234,17 @@ macro_rules! pratt_node {
                 let $nselfarg = self;
                 $nblock
             }
-            pub fn parse(mut $bt_arg: $crate::lexer::Token<'source>, $bl_arg: Node<'source>, $bo_arg: Node<'source>$(, $br_arg: Node<'source>)?) -> Option<$crate::parser::Node<'source>> $bblock
+            pub fn parse(
+                mut $bt_arg: $crate::lexer::Token<'source>,
+                $bl_arg: Node<'source>,
+                $bo_arg: Node<'source>
+                $(, $br_arg: Node<'source>)?
+            ) -> Option<$crate::parser::Node<'source>> $bblock
+
+            pub fn compile(self, $ccompilerarg: &mut $crate::compiler::Compiler<'source>) -> Result<(), $crate::compiler::CompilerError> {
+                let $cselfarg = self;
+                $cblock
+            }
         }
     };
 }
@@ -215,18 +272,14 @@ macro_rules! node_silent {
             build($bstack_arg:ident) $bblock:block
         }
     ) => {
-        define_node!(
-            $name() {
-                $($docstr)*
-                build($bstack_arg) $bblock
-                into_node(_this) {
-                    unimplemented!("Node {} cannot be built directly", stringify!($name));
-                }
-                into_owned(_this) {
-                    unimplemented!("Node {} cannot be built directly", stringify!($name));
-                }
-            }
-        );
+        $(#[doc = $docstr])*
+        #[derive(Clone, Debug)]
+        pub struct $name<'source>{
+            spoopy: std::marker::PhantomData<&'source ()>
+        }
+        impl<'source> $name<'source> {
+            pub fn parse($bstack_arg: &mut $crate::lexer::Stack<'source>) -> Option<$crate::parser::Node<'source>> $bblock
+        }
     };
 }
 
@@ -234,7 +287,7 @@ macro_rules! define_parser {
     ($($name:ident : $src:ident),+ $(,)?) => {
         #[derive(Clone)]
         pub enum Node<'source> {
-            Error($crate::error::Error),
+            Error($crate::parser::ParserError),
             $(
                 $name(Box<$src<'source>>),
             )+
@@ -243,23 +296,24 @@ macro_rules! define_parser {
         impl<'source> Node<'source> {
             pub fn token(&self) -> &$crate::lexer::Token<'source> {
                 match self {
-                    Self::Error(e) => match e {
-                        $crate::error::Error::UnrecognizedToken(t) => t,
-                        $crate::error::Error::Syntax { found, ..} => found,
-                        $crate::error::Error::UnreachableSwitchCase(t) => t,
-                        $crate::error::Error::MissingElse(t) => t,
-                        $crate::error::Error::AssignmentToConstant(t) => t,
-                        $crate::error::Error::NotADecorator(t) => t,
-                        $crate::error::Error::InvalidLiteral(t, _) => t,
-                    }
+                    Self::Error(e) => e.token(),
                     $(
                         Self::$name(n) => &n.token,
                     )+
                 }
             }
+
+            pub fn compile(self, compiler: &mut $crate::compiler::Compiler<'source>) -> Result<(), $crate::compiler::CompilerError> {
+                match self {
+                    Self::Error(e) => Err(e.into()),
+                    $(
+                        Self::$name(n) => n.compile(compiler),
+                    )+
+                }
+            }
         }
 
-        impl<'source> $crate::IntoOwned for Node<'source> {
+        impl<'source> $crate::traits::IntoOwned for Node<'source> {
             type Owned = Node<'static>;
             fn into_owned(self) -> Self::Owned {
                 match self {

@@ -8,7 +8,7 @@ macro_rules! generate_benches {
         const INPUT: &'static str = include_str!($input_file);
 
         fn lexer_pass() -> Vec<Token<'static>> {
-            Lexer::new(INPUT).all_tokens()
+            Lexer::new(INPUT).all_tokens().unwrap()
         }
 
         fn compiler_pass1(mut stack: Stack) {

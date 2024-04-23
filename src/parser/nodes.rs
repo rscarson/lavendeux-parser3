@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 pub mod arithmetic;
 pub mod assignment;
 pub mod bitwise;
@@ -22,10 +24,11 @@ use functions::*;
 use iterators::*;
 use literals::*;
 
+use super::traits::ParserNode;
+
 define_parser!(
     // Core lang nodes
     Script: ScriptNode,
-    Line: LineNode,
     Block: BlockNode,
     CastExpr: CastExprNode,
     DecoratorExpr: DecoratorExprNode,
@@ -37,17 +40,14 @@ define_parser!(
     DeleteExpr: DeleteExprNode,
 
     // Expression generics and pratt nodes
-    Expression: ExpressionNode,
     PrefixOperator: PrefixOperatorNode,
     InfixOperator: InfixOperatorNode,
     PostfixIndexingOperator: PostfixIndexingOperatorNode,
     PostfixFnCallOperator: PostfixFnCallOperatorNode,
-    PostfixIncDecOperator: PostfixIncDecOperatorNode,
 
     // Arithmetic nodes
     ArithmeticInfixExpr: ArithmeticInfixExprNode,
     ArithmeticPrefixExpr: ArithmeticPrefixExprNode,
-    ArithmeticPostfixExpr: ArithmeticPostfixExprNode,
 
     // Bit and bool nodes
     BitwiseNot: BitwiseNotNode,
@@ -81,7 +81,6 @@ define_parser!(
     LiteralString: LiteralStringNode,
     LiteralFloat: LiteralFloatNode,
     LiteralBool: LiteralBoolNode,
-    LiteralCurrency: LiteralCurrencyNode,
     LiteralInt: LiteralIntNode,
     LiteralIdent: LiteralIdentNode,
 );

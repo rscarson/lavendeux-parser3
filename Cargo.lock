@@ -198,6 +198,7 @@ checksum = "03b7013b21970d6dd4660617bc5a821e2eaad0e06dfd5be13d48faabdfd350fc"
 dependencies = [
  "fpdec-core",
  "fpdec-macros",
+ "serde",
 ]
 
 [[package]]
@@ -281,6 +282,9 @@ dependencies = [
  "fpdec",
  "lazy_static",
  "logos",
+ "regex",
+ "serde",
+ "serde_json",
  "stacker",
  "strum",
  "strum_macros",

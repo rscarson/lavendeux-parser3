@@ -1,0 +1,169 @@
+/**
+ * Lavendeux Standard Library
+ * Copyright Richard Carson, 2024
+ * Licensed under the MIT License
+ */
+
+//
+// Trigonometric functions
+//
+
+//# Calculate the tangent of a number, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# tan(to_radians(45)) == 1
+//# tan(PI) == 0
+tan(n: float): float = __syscalld(TAN, n)
+
+//# Calculate the sine of a number, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# sin(to_radians(90)) == 1
+//# sin(PI) == 0
+sin(n: float): float = __syscalld(SIN, n)
+
+//# Calculate the cosine of a number, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# cos(to_radians(0)) == 1
+//# cos(PI) == -1
+cos(n: float): float = __syscalld(COS, n)
+
+//# Calculate the arctangent2 of a number pair, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# atan2(1, 1) == PI / 4
+atan2(y: float, x: float): float = __syscalld(ATAN2, y, x)
+
+//# Calculate the arctangent of a number, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# atan(to_radians(1)) == PI / 4
+//# atan(0) == 0
+atan(n: float): float = __syscalld(ATAN, n)
+
+//# Calculate the arcsine of a number, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# asin(to_radians(1)) == PI / 2
+//# asin(0) == 0
+asin(n: float): float = __syscalld(ASIN, n)
+
+//# Calculate the arccosine of a number, in radians.
+//# use `to_radians` to convert degrees to radians.
+//# ```
+//# acos(to_radians(1)) == 0
+//# acos(0) == PI / 2
+acos(n: float): float = __syscalld(ACOS, n)
+
+//# Calculate the hyperbolic tangent of a number.
+//# ```
+//# tanh(0) == 0
+tanh(n: float): float = __syscalld(TANH, n)
+
+//# Calculate the hyperbolic sine of a number.
+//# ```
+//# sinh(0) == 0
+sinh(n: float): float = __syscalld(SINH, n)
+
+//# Calculate the hyperbolic cosine of a number.
+//# ```
+//# cosh(0) == 1
+cosh(n: float): float = __syscalld(COSH, n)
+
+//# Convert degrees to radians.
+//# Used to call trigonometric functions with degrees.
+//# ```
+//# to_radians(180) == PI
+to_radians(n: float): float = n * PI / 180
+
+//
+// Rounding functions
+//
+
+//# Truncate a number to the nearest integer less than or equal to the number.
+//# ```
+//# floor(1.5) == 1
+//# floor(-1.5) == -2
+floor(n: float): float = n as int as float
+
+//# Truncate a number to the nearest integer greater than or equal to the number.
+//# ```
+//# ceil(1.5) == 2
+//# ceil(-1.5) == -1
+ceil(n: float): float = (n as int as float) + 1
+
+//# Returns the absolute value of a number.
+//# ```
+//# abs(1) == abs(-1)
+abs(n: float): float = if n < 0 then -n else n
+
+//# Round a number to a given precision.
+//# ```
+//# round(1.51) == 2
+//# round(-1.51, 1) == -1.5
+round(n: float, precision: int): float = __syscalld(ROUND, n, precision)
+
+//
+// Logarithmic functions
+//
+
+//# Calculate the logarithm of a number with a given base.
+//# ```
+//# log(100, 10) == 2
+log(n: float, base: float): float = __syscalld(LOG, n, base)
+
+//# Calculate the natural logarithm of a number.
+//# ```
+//# ln(E) == 1
+log2(n: float): float = __syscalld(LOG, n, 2)
+
+//# Calculate the base 10 logarithm of a number.
+//# ```
+//# log10(100) == 2
+log10(n: float): float = __syscalld(LOG, n, 10)
+
+//# Calculate the natural logarithm of a number.
+//# ```
+//# ln(E) == 1
+ln(n: float): float = __syscalld(LOG, n, E)
+
+//# Calculate the logarithm of a number with a given base.
+//# ```
+//# log(100, 10) == 2
+ilog2(n: float): float = __syscalld(ILOG, n, 2)
+
+//# Calculate the base 10 logarithm of a number.
+//# ```
+//# log10(100) == 2
+ilog(n: float, base: float): float = __syscalld(ILOG, n, base)
+
+//
+// Misc functions
+//
+
+//# Calculate the root of a number with a given base.
+//# ```
+//# root(4, 2) == 2
+root(n: float, base: float): float = __syscalld(ROOT, n, base)
+
+//# Calculate the square root of a number.
+//# ```
+//# sqrt(4) == 2
+sqrt(n: float): float = __syscalld(ROOT, n, 2)
+
+//# Calculate the cube root of a number.
+//# ```
+//# cbrt(8) == 2
+cbrt(n: float): float = __syscalld(ROOT, n, 3)
+
+//# Returns the maximum of two numbers.
+//# ```
+//# max(1, 2) == 2
+max(a: numeric, b: numeric): numeric = if a > b then a else b
+
+//# Returns the minimum of two numbers.
+//# ```
+//# min(1, 2) == 1
+min(a: numeric, b: numeric): numeric = if a < b then a else b
+
