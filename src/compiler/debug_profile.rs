@@ -9,6 +9,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct DebugProfile<'source> {
     input: Cow<'source, str>,
+    source: Vec<(String, String)>,
     map: Vec<(usize, SerializedToken)>,
 }
 
@@ -36,6 +37,7 @@ impl<'source> DebugProfile<'source> {
     pub fn offset(&mut self, offset: usize) {
         for (_, token) in &mut self.map {
             token.span.start -= offset;
+            token.span.end -= offset;
         }
     }
 

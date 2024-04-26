@@ -25,23 +25,38 @@ pub use category::Category;
 
 /// A lexer for the language
 /// Splits the input into tokens
-pub struct Lexer<'source>(logos::Lexer<'source, Rule>);
+pub struct Lexer<'source> {
+    source: logos::Lexer<'source, Rule>,
+    filename: Option<String>,
+}
 impl<'source> Lexer<'source> {
     /// Creates a new lexer from the input
     pub fn new(input: &'source str) -> Self {
-        Self(Rule::lexer_with_extras(input, 1))
+        Self::with_filename(input, None)
+    }
+
+    /// Creates a new lexer from the input with a filename
+    pub fn with_filename(input: &'source str, filename: Option<String>) -> Self {
+        Self {
+            source: Rule::lexer_with_extras(input, 1),
+            filename: filename,
+        }
     }
 
     /// Consumes and returns the next token
     pub fn consume_next(&mut self) -> Token<'source> {
-        let token = self.0.next().unwrap_or_else(|| Ok(Rule::EOI));
-        let input = self.0.source();
-        Token::new(
-            self.0.extras,
-            self.0.span(),
+        let token = self.source.next().unwrap_or_else(|| Ok(Rule::EOI));
+        let input = self.source.source();
+        let mut t = Token::new(
+            self.source.extras,
+            self.source.span(),
             token.unwrap_or_else(|_| Rule::Error),
             Cow::Borrowed(input),
-        )
+        );
+        if let Some(filename) = &self.filename {
+            t = t.add_filename(filename.clone());
+        }
+        t
     }
 
     /// Consumes this iterator, returning all tokens in the input

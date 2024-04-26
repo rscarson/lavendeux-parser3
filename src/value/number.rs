@@ -267,7 +267,9 @@ impl SerializeToBytes for Number {
         let coeef = i128::deserialize_from_bytes(bytes)?;
         let frac = u8::deserialize_from_bytes(bytes)?;
 
-        let symbol_type = bytes.next().ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let symbol_type = bytes
+            .next()
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("Number".to_string()))?;
         let symbol = match symbol_type {
             0x00 => None,
             0x01 => {
@@ -280,6 +282,7 @@ impl SerializeToBytes for Number {
             }
             _ => {
                 return Err(ByteDecodeError::MalformedData(
+                    "Number".to_string(),
                     "Invalid symbol type".to_string(),
                 ))
             }

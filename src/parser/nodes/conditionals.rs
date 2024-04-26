@@ -1,3 +1,5 @@
+use optional_transpose::OptionTranspose;
+
 use super::*;
 use crate::{
     lexer::Rule,
@@ -43,22 +45,22 @@ define_node!(IfNode(
         // IF <CONDITION>
         this.condition.compile(compiler)?;
         compiler.push(OpCode::JMPF);
-        let jmp1 = compiler.push_i32(0); // Placeholder for a forward jump
+        let jmp1 = compiler.push_u64(0); // Placeholder for a forward jump
 
         // THEN <BLOCK>
         this.then_block.compile(compiler)?;
         compiler.push(OpCode::JMP);
-        let jmp2 = compiler.push_i32(0); // Placeholder for a forward jump
+        let jmp2 = compiler.push_u64(0); // Placeholder for a forward jump
 
         // Fill in the first else-jump
-        let jmp1_value = (compiler.len() - jmp1.end) as i32;
+        let jmp1_value = compiler.len() as u64;
         compiler.replace(jmp1, jmp1_value.to_be_bytes().to_vec());
 
         // ELSE <BLOCK>
         this.else_block.compile(compiler)?;
 
         // Fill in the second jump
-        let jmp2_value = (compiler.len() - jmp2.end) as i32;
+        let jmp2_value = compiler.len() as u64;
         compiler.replace(jmp2, jmp2_value.to_be_bytes().to_vec());
 
         Ok(())
@@ -106,13 +108,15 @@ define_node!(SwitchNode(
         tokens.start_transaction();
 
         // switch EXPR {
-        let mut token = terminal!(Switch, tokens)?;
-        let expr = non_terminal!(ExpressionNode, tokens)?;
-        terminal!(LBrace, tokens)?;
+        let mut token = terminal!(Switch, tokens, skip_eol!(tokens))?;
+        let expr = non_terminal!(ExpressionNode, tokens, skip_eol!(tokens))?;
+        terminal!(LBrace, tokens, skip_eol!(tokens))?;
 
         // First case - make sure we have at least one
         // ((CmpOp)? EXPR => BLOCK)
-        let cmp = terminal!(SEq|SNe|Eq|Ne|Le|Lt|Ge|Gt ?, tokens, skip_eol!(tokens)).map(|t| ComparisonOp::from_rule(t.rule()))?;
+        let cmp = terminal!(SEq|SNe|Eq|Ne|Le|Lt|Ge|Gt ?, tokens, skip_eol!(tokens));
+        let cmp = cmp.map(|t| ComparisonOp::from_rule(t.rule())).transpose()?;
+
         let value = non_terminal!(ExpressionNode, tokens, skip_eol!(tokens))?;
         terminal!(FatArrow, tokens, skip_eol!(tokens))?;
         let block = non_terminal!(BlockNode, tokens, skip_eol!(tokens))?;
@@ -129,7 +133,8 @@ define_node!(SwitchNode(
             }
 
             // (CmpOp)? EXPR
-            let cmp = terminal!(SEq|SNe|Eq|Ne|Le|Lt|Ge|Gt ?, tokens, skip_eol!(tokens)).map(|t| ComparisonOp::from_rule(t.rule()))?;
+            let cmp = terminal!(SEq|SNe|Eq|Ne|Le|Lt|Ge|Gt ?, tokens, skip_eol!(tokens));
+            let cmp = cmp.map(|t| ComparisonOp::from_rule(t.rule())).transpose()?;
             let value = match non_terminal!(ExpressionNode, tokens, skip_eol!(tokens)) {
                 Some(v) => v,
                 None => break,

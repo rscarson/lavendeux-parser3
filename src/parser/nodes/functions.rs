@@ -3,13 +3,13 @@ use std::str::FromStr;
 use super::*;
 use crate::{
     compiler::{CompilerError, FunctionDocs},
-    lexer::{Rule, TokenSpan},
+    lexer::{Rule, Token, TokenSpan},
     parser::{
         function_compiler::{FunctionArgumentCompiler, FunctionArgumentDefault, FunctionCompiler},
         special_functions, ParserError,
     },
     traits::IntoOwned,
-    value::{Value, ValueType},
+    value::{Primitive, Value, ValueType},
     vm::OpCode,
 };
 
@@ -18,7 +18,7 @@ define_node!(FnAssignNode(
     returns: Option<TokenSpan>,
     args: Vec<(TokenSpan, Option<TokenSpan>, Option<Node<'source>>)>, // (name, type, default)
     body: Node<'source>,
-    docs: FunctionDocs,
+    docs: Vec<Token<'source>>,
 ) {
 
     "Function assignment - Registers a function with the given name."
@@ -36,13 +36,11 @@ define_node!(FnAssignNode(
 
 
         // DocBlockComment*
-        let mut documentation = vec![];
+        let mut docs = vec![];
         while let Some(doc) = terminal!(DocBlockComment?, tokens) {
-            documentation.push(doc);
+            docs.push(doc);
             skip_eol!(tokens);
         }
-
-        let docs = FunctionDocs::parse_docblock(&documentation.iter().map(|t| t.slice()[3..].trim()).collect::<Vec<_>>());
 
         // At? ~ Identifer
         let decorator = terminal!(Decorator?, tokens);
@@ -51,9 +49,6 @@ define_node!(FnAssignNode(
 
         // Build the token
         let mut token = name.child(Rule::FnAssignExpr, name.span());
-        if let Some(t) = documentation.first() {
-            token.include_span(t.span());
-        }
         if let Some(t) = decorator {
             token.include_span(t.span());
         }
@@ -235,12 +230,16 @@ define_node!(FnAssignNode(
 
         compiler.push_token(this.token);
 
+        let arg_names = arguments.iter().map(|(name, _, _)| name.as_str()).collect::<Vec<_>>();
+        let doc_strings = this.docs.iter().map(|t| t.slice()[3..].trim()).collect::<Vec<_>>();
+        let doc = FunctionDocs::parse_docblock(&name, arg_names.as_slice(), &doc_strings);
+
         let fcomp = FunctionCompiler {
             name,
             body: this.body,
             ty: returns,
             dbg: None,
-            doc: this.docs,
+            doc,
             args: arguments.into_iter().map(|(name, ty, default)| {
                 FunctionArgumentCompiler {
                     name,
@@ -267,7 +266,7 @@ define_node!(FnAssignNode(
                 (name, ty, default.map(|d| d.into_owned()))
             }).collect(),
             body: this.body.into_owned(),
-            docs: this.docs,
+            docs: this.docs.into_iter().map(|t| t.into_owned()).collect(),
             token: this.token.into_owned(),
         }
     }
@@ -364,6 +363,29 @@ pratt_node!(FnCallNode(name_span: TokenSpan, args: Vec<Node<'source>>) {
                 let opcode = this.args.get(0).map(|a| a.token().slice()).unwrap_or("");
                 let opcode = OpCode::from_str(opcode).map_err(|_| CompilerError::InvalidSyscallOpcode(_token.into_owned(), opcode.to_string()))?;
                 special_functions::__syscalld(compiler, opcode, this.args[1..].to_vec())?;
+            }
+
+            "dissasemble" => {
+                if this.args.len() != 1 {
+                    return Err(CompilerError::InvalidArgumentCount(_token.into_owned(), name, 1, this.args.len()));
+                }
+                let expr = this.args.get(0).unwrap().clone();
+                special_functions::__dissasemble(compiler, expr)?;
+            }
+
+            "include" => {
+                if this.args.len() != 1 {
+                    return Err(CompilerError::InvalidArgumentCount(_token.into_owned(), name, 1, this.args.len()));
+                }
+                let filename = match this.args.get(0).unwrap().clone() {
+                    Node::LiteralString(s) => match s.value {
+                        Primitive::String(s) => s,
+                        _ => unreachable!()
+                    },
+                    _ => return Err(CompilerError::InvalidInclude(_token.into_owned()))
+                };
+
+                special_functions::__include(compiler, _token, filename)?;
             }
 
             //

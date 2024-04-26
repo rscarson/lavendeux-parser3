@@ -36,52 +36,47 @@ pub enum OpCode {
     /// Control flow //
     ///////////////////
     
-    /// Jump forward or backward by `n` bytes
-    /// `JMP <i32>`
+    /// Jump to a specific location in the bytecode
+    /// `JMP <u64>`
     JMP,
 
-    /// Jump forward or backward by `n` bytes if the top value on the stack is true
+    /// Jump to a specific location in the bytecode if the top value on the stack is true
     /// Consumes 1 stack value
-    /// `JMPR <i32>`
+    /// `JMPR <u64>`
     JMPT,
 
-    /// Jump forward or backward by `n` bytes if the top value on the stack is false
+    /// Jump to a specific location in the bytecode if the top value on the stack is false
     /// Consumes 1 stack value
-    /// `JMPR <i32>`
+    /// `JMPR <u64>`
     JMPF,
 
-    /// Jump forward or backward by `n` bytes if the top value on the stack is empty
+    /// Jump to a specific location in the bytecode if the top value on the stack is empty
     /// Consumes 1 stack value
-    /// `JMPE <i32>`
+    /// `JMPE <u64>`
     JMPE,
+
+    /// Jump to a specific location in the bytecode if the top value on the stack is not empty
+    /// Consumes 1 stack value
+    /// `JMPNE <u64>`
+    JMPNE,
 
     /////////////////////////
     // Memory manipulation //
     /////////////////////////
-     
-    /// Write a value to memory
-    /// Consumes 1 stack value
-    /// Pushes 1 value onto the stack
-    /// `WRITE <Name Hash>`
-    WRIT,
-
-    /// Read a value from memory
-    /// Pushes 1 value onto the stack
-    /// `READ <Name Hash>`
-    READ,
-
-    /// Delete a value from memory
-    /// `DEL <Name Hash>`
-    DEL,
 
     /// Read a value from memory by reference
     /// Pushes 1 value onto the stack
     /// `REF <Name Hash>`
     REF,
 
+    /// Consumes a reference and pushes the value it points to onto the stack
+    /// Consumes 1 stack value [Reference]
+    /// Pushes 1 value onto the stack [Value]
+    RREF,
+
     /// Write a value to a reference
     /// If the last part of the reference is not valid, it is created
-    /// Consumes 2 stack values (reference, value)
+    /// Consumes 2 stack values (value, reference)
     /// Pushes 1 value onto the stack
     /// `WREF`
     WREF,
@@ -378,7 +373,7 @@ pub enum OpCode {
     /// Set the signature of a function
     /// Consumes 1 stack value; [Function]
     /// Pushes 1 value onto the stack; [Function]
-    /// `FSIG <string: name> <u16 nargs> [ arg_names ]`
+    /// `FSIG`
     FSIG,
 
     /// Call a function
@@ -400,6 +395,35 @@ pub enum OpCode {
     /// Consumes 1 stack value
     /// `PRNT`
     PRNT,
+
+    /// Read a file from the filesystem
+    /// Consumes 1 stack value; [Path] 
+    /// Pushes 1 value onto the stack; [File]
+    /// If lines is 0, the entire file is read
+    /// Otherwise, the last `lines` lines are read
+    /// `READF <lines: u64>
+    READF,
+
+    /// List all functions in memory
+    /// Pushes 1 value onto the stack; [Functions]
+    /// `LSTFN`
+    LSTFN,
+
+    /// Get the length of the top value on the stack
+    /// Consumes 1 stack value [Value]
+    /// Pushes 1 value onto the stack [Length]
+    /// `LEN`
+    LEN,
+
+    /// Split a string by a pattern
+    /// Consumes 2 stack values; [String, Pattern]
+    /// Pushes 1 value onto the stack; [Array]
+    /// `SSPLT`
+    SSPLT,
+
+    //////////////
+    // Math ops //
+    //////////////
     
     /// Calculate the tangent of the top value on the stack
     /// Expects a value in radians

@@ -17,7 +17,6 @@ mod control;
 mod functions;
 mod index;
 mod io;
-mod mem;
 mod references;
 mod stack;
 
@@ -27,7 +26,6 @@ use control::ControlExt;
 use functions::FunctionExt;
 use index::IndexExt;
 use io::IOExt;
-use mem::MemExt;
 use references::RefExt;
 use stack::StackExt;
 
@@ -153,6 +151,13 @@ impl<'source> ExecutionContext<'source> {
     /// Run the next instruction in the current context.
     pub fn next(&mut self) -> Result<(), RuntimeError> {
         let opcode = self.read_opcode()?;
+
+        //#[cfg(feature = "debug_compiler_internal")]
+        {
+            print!("{:?} ", opcode);
+            println!("stack={:?}", self.stack);
+        }
+
         self.last_opcode = opcode;
         match opcode {
             ////////////////////////
@@ -170,15 +175,13 @@ impl<'source> ExecutionContext<'source> {
             OpCode::JMPT => self.jump_if_true()?,
             OpCode::JMPF => self.jump_if_false()?,
             OpCode::JMPE => self.jump_if_empty()?,
+            OpCode::JMPNE => self.jump_if_not_empty()?,
 
             /////////////////////////
             // Memory manipulation //
             /////////////////////////
-            OpCode::WRIT => self.write_memory()?,
-            OpCode::READ => self.read_memory()?,
-            OpCode::DEL => self.delete_memory()?,
-
             OpCode::REF => self.read_reference()?,
+            OpCode::RREF => self.consume_reference()?,
             OpCode::WREF => self.write_reference()?,
             OpCode::DREF => self.delete_reference()?,
 
@@ -207,7 +210,7 @@ impl<'source> ExecutionContext<'source> {
                 let (first, rest) = match value {
                     Value::Primitive(p) => (Value::Primitive(p), Value::Array(vec![])),
                     Value::Function(f) => (Value::Function(f), Value::Array(vec![])),
-                    Value::Reference(_, _) => unreachable!(),
+                    Value::Reference(_) => unreachable!(),
 
                     Value::Array(mut array) => {
                         if array.is_empty() {
@@ -246,7 +249,7 @@ impl<'source> ExecutionContext<'source> {
                 let left = self.pop()?;
 
                 let lefttype = left
-                    .type_of(Some(&self.mem))
+                    .type_of(Some(&mut self.mem))
                     .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
                 let right = right
                     .cast(lefttype)
@@ -334,6 +337,51 @@ impl<'source> ExecutionContext<'source> {
                 self.push(value);
             }
 
+            OpCode::READF => todo!(),
+
+            OpCode::LSTFN => {
+                let functions = self.mem.all_functions();
+                let values = functions
+                    .into_iter()
+                    .cloned()
+                    .map(Value::Function)
+                    .collect();
+                self.push(Value::Array(values));
+            }
+
+            ////////////////////
+            // Collection ops //
+            ////////////////////
+            OpCode::LEN => {
+                let value = self.pop()?;
+                let value = self.resolve_reference(value)?;
+                self.push(Value::integer(value.len()));
+            }
+
+            OpCode::SSPLT => {
+                let pat = self.pop()?;
+                let value = self.pop()?;
+
+                let pat = self.resolve_reference(pat)?;
+                let pat = pat
+                    .cast_string()
+                    .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
+
+                let value = self.resolve_reference(value)?;
+                let value = value
+                    .cast_string()
+                    .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
+
+                let result = value
+                    .split(&pat)
+                    .map(|s| Value::string(s.to_string()))
+                    .collect::<Vec<_>>();
+                self.push(Value::Array(result));
+            }
+
+            ////////////////
+            // Trigonomic //
+            ////////////////
             OpCode::ATAN2 => self.op_binary(math::atan2)?,
             OpCode::TAN => self.op_unary(math::tan)?,
             OpCode::SIN => self.op_unary(math::sin)?,

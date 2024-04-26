@@ -284,20 +284,19 @@ __zarban_savedata_reset() = {
     __zarban_goto_chapter("intro_cave1")
 }
 
-// Zarban game start
-// Usage: `play_zarban()`
+//# category: Zarban's Grotto
+//# Start a new game of Zarban's Grotto
+//# ```lav
+//# play_zarban()
 play_zarban(): string = {
     __zarban_savedata_reset()
     __zarban_draw_ui(false)
 }
-document_function('play_zarban', {
-    "category": "Zarban's Grotto",
-    "description": "Start a new game of Zarban's Grotto",
-    "examples": "play_zarban()"
-})
 
-// Zarban game loop
-// Usage: `zarban(1)`
+//# category: Zarban's Grotto
+//# Advance the story by selecting a choice
+//# ```lav
+//# zarban(1)
 zarban(choice: int): string = {
     save = global('__zarban_savedata')
     choices = __zarban_get_choices()
@@ -328,20 +327,12 @@ zarban(choice: int): string = {
         __zarban_draw_ui(true)
     }
 }
-document_function('zarban', {
-    "category": "Zarban's Grotto",
-    "description": "Function to advance the story",
-    "examples": "zarban(1)"
-})
 
-// Zarban decorator
-// Usage: `<choice> @zarban`
+//# category: Zarban's Grotto
+//# Advance the story by selecting a choice
+//# ```lav
+//# 1 @zarban
 @zarban(choice: int) = zarban(choice)
-document_function('@zarban', {
-    "category": "Zarban's Grotto",
-    "description": "Decorator to advance the story",
-    "examples": "1 @zarban"
-})
 
 //
 // Tests

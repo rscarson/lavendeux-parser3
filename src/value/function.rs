@@ -96,10 +96,12 @@ impl SerializeToBytes for FunctionArgument {
     ) -> Result<Self, crate::traits::ByteDecodeError> {
         let name_hash = u64::deserialize_from_bytes(bytes)?;
         let ty = u8::deserialize_from_bytes(bytes)?;
-        let ty = ValueType::from_u8(ty).ok_or(ByteDecodeError::MalformedData(format!(
-            "Bad TypeId in FunctionArgument: {}",
-            ty
-        )))?;
+        let ty = ValueType::from_u8(ty).ok_or_else(|| {
+            ByteDecodeError::MalformedData(
+                "Function".to_string(),
+                "Invalid argument type".to_string(),
+            )
+        })?;
         let default = Option::<Value>::deserialize_from_bytes(bytes)?;
 
         Ok(Self {
@@ -129,9 +131,12 @@ impl SerializeToBytes for Function {
     ) -> Result<Self, crate::traits::ByteDecodeError> {
         let name_hash = u64::deserialize_from_bytes(bytes)?;
         let returns = u8::deserialize_from_bytes(bytes)?;
-        let returns = ValueType::from_u8(returns).ok_or(ByteDecodeError::MalformedData(
-            format!("Bad TypeId in Function: {}", returns),
-        ))?;
+        let returns = ValueType::from_u8(returns).ok_or_else(|| {
+            ByteDecodeError::MalformedData(
+                "Function".to_string(),
+                "Invalid return type".to_string(),
+            )
+        })?;
         let expects = Vec::<FunctionArgument>::deserialize_from_bytes(bytes)?;
         let debug = Option::<DebugProfile<'static>>::deserialize_from_bytes(bytes)?;
         let docs = FunctionDocs::deserialize_from_bytes(bytes)?;

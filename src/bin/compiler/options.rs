@@ -107,6 +107,10 @@ impl CliOptions {
                     }
                 }
 
+                "-D" | "--debug-functions" => {
+                    options.debug_path = Some(String::new());
+                }
+
                 "--allow-syscalld" => options.allow_syscalld = true,
 
                 "-h" | "--help" => {
@@ -133,6 +137,7 @@ Input/Output Options:
   -i, --input <input>: Read input from command line
   -o, --output <output>: Set output filename
   -d, --debug <path>: Set debug symbol output path
+  -D, --debug-functions: Enable debug symbols, but don't output them (warning; only useful with -F)
 
 Flags:
   --allow-syscalld: Enables calls to __syscalld() in the compiler\

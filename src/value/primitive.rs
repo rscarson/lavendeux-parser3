@@ -477,9 +477,10 @@ impl SerializeToBytes for Primitive {
                 Ok(Primitive::String(String::deserialize_from_bytes(bytes)?))
             }
 
-            _ => Err(crate::traits::ByteDecodeError::MalformedData(format!(
-                "Invalid type"
-            ))),
+            _ => Err(crate::traits::ByteDecodeError::MalformedData(
+                "Primitive".to_string(),
+                "Invalid value type".to_string(),
+            )),
         }
     }
 }

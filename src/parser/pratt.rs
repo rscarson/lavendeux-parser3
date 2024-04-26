@@ -1,5 +1,5 @@
 use crate::{
-    lexer::Rule::{self, *},
+    lexer::Rule,
     parser::{
         arithmetic::*,
         assignment::*,
@@ -12,40 +12,6 @@ use crate::{
         Node,
     },
 };
-
-use lazy_static::lazy_static;
-use std::collections::HashMap;
-
-macro_rules! bind {
-    ($($rule:ident)|+ => Infix::Left, $map:ident :: $cur:ident) => {{
-        let v = [$(
-            ($rule, ($cur+1, $cur)),
-        )+];
-        $cur += 2;
-        $map.extend(v.into_iter());
-    }};
-    ($($rule:ident)|+ => Infix::Right, $map:ident :: $cur:ident) => {{
-        let v = [$(
-            ($rule, ($cur, $cur+1)),
-        )+];
-        $cur += 2;
-        $map.extend(v.into_iter());
-    }};
-    ($($rule:ident)|+ => Prefix, $map:ident :: $cur:ident) => {{
-        let v = [$(
-            ($rule, ($cur, 0)),
-        )+];
-        $cur += 1;
-        $map.extend(v.into_iter());
-    }};
-    ($($rule:ident)|+ => Postfix, $map:ident :: $cur:ident) => {{
-        let v = [$(
-            ($rule, (0, $cur)),
-        )+];
-        $cur += 1;
-        $map.extend(v.into_iter());
-    }};
-}
 
 /// Attempts to use the Pratt parsing algorithm to parse an expression of the form
 /// prefix_op? ~ EOL* ~ TERM ~ postfix_operation* ~ ( EOL* ~ infix_op ~ prefix_op? ~ EOL* ~ TERM ~ postfix_operation*)*
@@ -185,47 +151,89 @@ pub fn build_pratt_unary<'source>(term: Node<'source>, op: Node<'source>) -> Opt
 /// Returns None if the rule is not in the map
 /// The tuple is (left, right) binding power
 fn priority_of(rule: Rule) -> Option<(u8, u8)> {
-    PRATT_PRIORITY.get(&rule).cloned()
+    PRATT_PRIORITY[rule as usize]
 }
-lazy_static! {
-    pub static ref PRATT_PRIORITY: HashMap<Rule, (u8, u8)> = {
-        let mut cur = 1;
-        let mut map: Vec<(Rule, (u8, u8))> = vec![];
 
-        bind!(
-            Assign
-            |AssignAdd|AssignSub|AssignPow|AssignMod|AssignMul|AssignDiv
-            |AssignAnd|AssignOr|AssignXor|AssignSL|AssignSR
-        => Infix::Right, map::cur);
+fn generate_pratttable() -> Vec<Option<(u8, u8)>> {
+    struct Precedence(u8);
+    impl Precedence {
+        fn lhs(&mut self) -> (u8, u8) {
+            (self.0, self.0 + 1)
+        }
 
-        bind!(Delete => Prefix, map::cur);
-        bind!(Range => Infix::Left, map::cur);
-        bind!(TernaryOperator => Infix::Right, map::cur);
-        bind!(DecoratorOperator => Postfix, map::cur);
+        fn rhs(&mut self) -> (u8, u8) {
+            (self.0, self.0 + 1)
+        }
 
-        bind!(LogicalOr => Infix::Left, map::cur);
-        bind!(LogicalAnd => Infix::Left, map::cur);
+        fn prefix(&mut self) -> (u8, u8) {
+            (self.0 + 1, 0)
+        }
 
-        bind!(Matches|Contains|StartsWith|EndsWith => Infix::Left, map::cur);
+        fn postfix(&mut self) -> (u8, u8) {
+            (0, self.0 + 1)
+        }
 
-        bind!(BitwiseOr => Infix::Left, map::cur);
-        bind!(Xor => Infix::Left, map::cur);
-        bind!(BitwiseAnd => Infix::Left, map::cur);
+        fn advance(&mut self) {
+            self.0 += 1;
+        }
+    }
 
-        bind!(Eq|Ne|SEq|SNe => Infix::Left, map::cur);
-        bind!(Lt|Gt|Le|Ge => Infix::Left, map::cur);
+    macro_rules! bind {
+        ($table:ident, $precedence:ident :: Right => $($rule:ident)|+) => {
+            $( $table[Rule::$rule as usize] = Some($precedence.rhs()); )+
+            $precedence.advance();
+        };
+        ($table:ident, $precedence:ident :: Left => $($rule:ident)|+) => {
+            $( $table[Rule::$rule as usize] = Some($precedence.lhs()); )+
+            $precedence.advance();
+        };
+        ($table:ident, $precedence:ident :: Prefix => $($rule:ident)|+) => {
+            $( $table[Rule::$rule as usize] = Some($precedence.prefix()); )+
+            $precedence.advance();
+        };
+        ($table:ident, $precedence:ident :: Postfix => $($rule:ident)|+) => {
+            $( $table[Rule::$rule as usize] = Some($precedence.postfix()); )+
+            $precedence.advance();
+        };
+    }
 
-        bind!(SL|SR => Infix::Left, map::cur);
+    let mut precedence = Precedence(1);
+    let mut table = Vec::with_capacity(Rule::Error as usize);
+    table.resize(Rule::Error as usize, None);
 
-        bind!(Add|Sub => Infix::Left, map::cur);
-        bind!(Mul|Div|Mod => Infix::Left, map::cur);
-        bind!(Pow => Infix::Right, map::cur);
+    bind!(table, precedence::Right => Assign|AssignAdd|AssignSub|AssignPow|AssignMod|AssignMul|AssignDiv|AssignAnd|AssignOr|AssignXor|AssignSL|AssignSR);
 
-        bind!(PrefixNeg|BitwiseNot|LogicalNot => Prefix, map::cur);
-        bind!(FnCallOperator|IndexingOperator => Postfix, map::cur);
+    bind!(table, precedence::Prefix => Delete);
+    bind!(table, precedence::Right => Range);
+    bind!(table, precedence::Right => TernaryOperator);
+    bind!(table, precedence::Postfix => DecoratorOperator);
 
-        bind!(As => Infix::Right, map::cur);
+    bind!(table, precedence::Left => LogicalOr);
+    bind!(table, precedence::Left => LogicalAnd);
 
-        map.into_iter().collect()
-    };
+    bind!(table, precedence::Left => Matches|Contains|StartsWith|EndsWith);
+
+    bind!(table, precedence::Left => BitwiseOr);
+    bind!(table, precedence::Left => Xor);
+    bind!(table, precedence::Left => BitwiseAnd);
+
+    bind!(table, precedence::Left => Eq|Ne|SEq|SNe);
+    bind!(table, precedence::Left => Lt|Gt|Le|Ge);
+
+    bind!(table, precedence::Left => SL|SR);
+
+    bind!(table, precedence::Left => Add|Sub);
+    bind!(table, precedence::Left => Mul|Div|Mod);
+    bind!(table, precedence::Right => Pow);
+
+    bind!(table, precedence::Prefix => PrefixNeg|BitwiseNot|LogicalNot);
+    bind!(table, precedence::Postfix => FnCallOperator|IndexingOperator);
+
+    bind!(table, precedence::Right => As);
+
+    table
+}
+
+lazy_static::lazy_static! {
+    pub static ref PRATT_PRIORITY: Vec<Option<(u8, u8)>> = generate_pratttable();
 }

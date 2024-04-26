@@ -61,10 +61,11 @@ impl CollectionExt for super::ExecutionContext<'_> {
             .resolve(end)
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
 
-        match start
+        let types = start
             .type_of(None)
-            .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?
-        {
+            .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
+
+        match types {
             ValueType::Integer => {
                 let start = start
                     .cast_integer()
@@ -102,7 +103,7 @@ impl CollectionExt for super::ExecutionContext<'_> {
                     return Err(self.emit_err(RuntimeErrorType::InvalidStringsForRange));
                 }
             }
-            _ => return Err(self.emit_err(RuntimeErrorType::InvalidValuesForRange)),
+            _ => return Err(self.emit_err(RuntimeErrorType::InvalidValuesForRange(types))),
         }
         Ok(())
     }

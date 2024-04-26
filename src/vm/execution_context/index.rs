@@ -26,11 +26,16 @@ impl IndexExt for super::ExecutionContext<'_> {
 
         // Now we branch on whether the base is a reference
         match base {
-            Value::Reference(slotref, mut path) => {
+            Value::Reference(mut reference) => {
                 // This is the easiest cast, we just add the new index to the ref path
                 // The actual work of checking the reference happens when the value is used
-                path.push(index);
-                self.push(Value::Reference(slotref, path));
+                reference
+                    .resolve(&mut self.mem)
+                    .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
+                reference
+                    .add_index(index)
+                    .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
+                self.push(Value::Reference(reference));
             }
 
             Value::Primitive(Primitive::String(string)) => {

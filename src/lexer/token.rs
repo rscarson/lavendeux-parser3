@@ -9,6 +9,9 @@ pub type TokenSpan = std::ops::Range<usize>;
 /// A token, with string input removed. Call `unpack` to get the full token
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SerializedToken {
+    /// File the token is from
+    pub filename: Option<String>,
+
     /// The line number of the token
     pub line: usize,
 
@@ -23,6 +26,7 @@ impl SerializedToken {
     /// Pack a token into a serializable form
     pub fn pack(token: Token<'_>) -> Self {
         Self {
+            filename: token.filename,
             line: token.line,
             span: token.span.clone(),
             rule: token.rule.clone(),
@@ -32,6 +36,7 @@ impl SerializedToken {
     /// Unpack a token from a serializable form
     pub fn unpack<'source>(&self, input: &'source str) -> Token<'source> {
         Token {
+            filename: self.filename.clone(),
             line: self.line,
             span: self.span.clone(),
             rule: self.rule.clone(),
@@ -43,6 +48,7 @@ impl SerializedToken {
 impl SerializeToBytes for SerializedToken {
     fn serialize_into_bytes(self) -> Vec<u8> {
         let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.filename.serialize_into_bytes());
         bytes.extend_from_slice(&self.line.serialize_into_bytes());
         bytes.extend_from_slice(&self.span.start.serialize_into_bytes());
         bytes.extend_from_slice(&self.span.end.serialize_into_bytes());
@@ -53,12 +59,14 @@ impl SerializeToBytes for SerializedToken {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, crate::traits::ByteDecodeError> {
+        let filename = Option::<String>::deserialize_from_bytes(bytes)?;
         let line = usize::deserialize_from_bytes(bytes)?;
         let start = usize::deserialize_from_bytes(bytes)?;
         let end = usize::deserialize_from_bytes(bytes)?;
         let rule = Rule::deserialize_from_bytes(bytes)?;
 
         Ok(Self {
+            filename,
             line,
             span: start..end,
             rule,
@@ -69,6 +77,7 @@ impl SerializeToBytes for SerializedToken {
 /// A token, with a reference to the input string
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Token<'source> {
+    filename: Option<String>,
     line: usize,
     span: TokenSpan,
     rule: Rule,
@@ -78,6 +87,7 @@ impl<'source> IntoOwned for Token<'source> {
     type Owned = Token<'static>;
     fn into_owned(self) -> Self::Owned {
         Self::Owned {
+            filename: self.filename,
             line: self.line,
             span: self.span,
             rule: self.rule,
@@ -88,11 +98,23 @@ impl<'source> IntoOwned for Token<'source> {
 impl<'source> Token<'source> {
     pub(crate) fn new(line: usize, span: TokenSpan, rule: Rule, input: Cow<'source, str>) -> Self {
         Self {
+            filename: None,
             line,
             span,
             rule,
             input,
         }
+    }
+
+    /// Add a filename to the token
+    pub fn add_filename(mut self, filename: String) -> Self {
+        self.filename = Some(filename);
+        self
+    }
+
+    /// Get the filename of the token
+    pub fn filename(&self) -> Option<&str> {
+        self.filename.as_deref()
     }
 
     /// Get the input string
@@ -103,6 +125,7 @@ impl<'source> Token<'source> {
     /// Get a new token with a different rule, but the same span and line
     pub fn child(&self, rule: Rule, span: TokenSpan) -> Self {
         Token {
+            filename: self.filename.clone(),
             line: self.line,
             span: span.start..span.end,
             rule,
@@ -131,6 +154,9 @@ impl<'source> Token<'source> {
         let start = self.input[..self.span.start]
             .rfind('\n')
             .map_or(0, |pos| pos + 1);
+        if self.span.end >= self.input.len() {
+            return (&self.input[start..], self.span.start - start);
+        }
         let mut end = self.input[self.span.end..]
             .find('\n')
             .map_or(self.input.len(), |pos| pos + self.span.end);
@@ -223,6 +249,11 @@ impl std::fmt::Debug for Token<'_> {
 
 impl std::fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Line {}\n{}", self.line(), self.context_slice())
+        let filename = match self.filename() {
+            Some(filename) => format!("{}:{}", filename, self.line()),
+            None => format!("Line {}", self.line()),
+        };
+        let context = self.context_slice();
+        write!(f, "{filename}\n{context}")
     }
 }

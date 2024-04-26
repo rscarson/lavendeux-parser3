@@ -1,10 +1,7 @@
 //! # Value
 //! The value type used by the language
 //! Contains the main value type and all subtypes
-use crate::{
-    traits::SerializeToBytes,
-    vm::memory_manager::{MemoryManager, SlotRef},
-};
+use crate::{traits::SerializeToBytes, vm::memory_manager::MemoryManager};
 use std::collections::HashMap;
 
 mod error;
@@ -15,6 +12,9 @@ pub use function::*;
 
 mod number;
 pub use number::{Number, NumberSymbol};
+
+mod reference;
+pub use reference::*;
 
 mod primitive;
 pub use primitive::Primitive;
@@ -46,12 +46,12 @@ pub enum Value {
     Range(std::ops::Range<i128>),
 
     /// Represents a reference to a value in the memory manager
-    Reference(SlotRef, Vec<Value>),
+    Reference(Reference),
 }
 
 impl Value {
     /// Return a reference to the value at the specified index
-    pub fn get_index(&self, index: &Value) -> Result<&Value, ValueError> {
+    pub fn get_index(&self, index: Value) -> Result<&Value, ValueError> {
         let own_type = self.type_of(None)?;
         let idx_type = index.type_of(None)?;
         match self {
@@ -280,23 +280,6 @@ impl Value {
         Ok(())
     }
 
-    /// Read a value from the memory manager
-    pub fn reference_read(self, state: &mut MemoryManager) -> Result<Value, ValueError> {
-        match self {
-            Value::Reference(r, idx_path) => match r.get(state) {
-                Some(base_value) => {
-                    let mut target = base_value.clone();
-                    for idx in idx_path.iter() {
-                        target = target.into_index(idx.clone())?.clone();
-                    }
-                    Ok(target)
-                }
-                None => Err(ValueError::BadReference),
-            },
-            _ => Ok(self),
-        }
-    }
-
     /// Cast a value to a type
     pub fn cast(self, typename: ValueType) -> Result<Self, ValueError> {
         let own_type = self.type_of(None)?;
@@ -336,6 +319,20 @@ impl Value {
         }
     }
 
+    /// Returns the length of the value
+    /// For arrays, objects, and strings, this is the number of elements
+    /// For ranges, this is the difference between the start and end
+    /// For primitives, this is always 1
+    pub fn len(&self) -> i128 {
+        match self {
+            Value::Array(a) => a.len() as i128,
+            Value::Object(o) => o.len() as i128,
+            Value::Range(r) => (r.end - r.start) as i128,
+            Value::Primitive(Primitive::String(s)) => s.len() as i128,
+            _ => 1,
+        }
+    }
+
     /// Checks if the value is of a certain type
     pub fn is_type(&self, typename: ValueType) -> bool {
         let own_type = match self.type_of(None) {
@@ -368,97 +365,110 @@ impl Value {
     }
 
     /// Returns the type of the value
-    pub fn type_of(&self, mem: Option<&MemoryManager>) -> Result<ValueType, ValueError> {
+    pub fn type_of(&self, mem: Option<&mut MemoryManager>) -> Result<ValueType, ValueError> {
         match self {
-            Value::Primitive(_) => Ok(ValueType::Primitive),
+            Value::Primitive(p) => Ok(p.type_of()),
             Value::Function(_) => Ok(ValueType::Function),
 
             Value::Array(_) => Ok(ValueType::Array),
             Value::Object(_) => Ok(ValueType::Object),
             Value::Range(_) => Ok(ValueType::Range),
 
-            Value::Reference(slot, path) => match mem {
+            Value::Reference(reference) => match mem {
                 Some(mem) => {
-                    let mut target = slot.get(mem).ok_or(ValueError::UnresolvedReference)?;
-                    for idx in path.iter() {
-                        target = target.get_index(idx)?;
-                    }
-                    target.type_of(Some(mem))
+                    let value = reference.value(mem)?;
+                    value.type_of(None)
                 }
-
-                None => Err(ValueError::UnresolvedReference),
+                None => return Err(ValueError::SlotRefInvalid),
             },
         }
     }
 
     /// Resolves two values into a common type
     pub fn resolve(self, other: Self) -> Result<(Self, Self), ValueError> {
-        let (ta, tb) = (self.type_of(None)?, other.type_of(None)?);
-        match (ta, tb) {
-            (ValueType::Primitive, ValueType::Primitive) => {
-                if let (Value::Primitive(p1), Value::Primitive(p2)) = (self, other) {
-                    let (t1, t2) = (p1.type_of(), p2.type_of());
-                    let (p1, p2) = p1.resolve(p2).ok_or(ValueError::TypeConversion(t1, t2))?;
-                    Ok((Value::Primitive(p1), Value::Primitive(p2)))
-                } else {
-                    unreachable!("Both values are primitives")
-                }
+        let (mut ta, mut tb) = (self.type_of(None)?, other.type_of(None)?);
+        if ta == tb {
+            Ok((self, other))
+        } else {
+            if matches!(
+                ta,
+                ValueType::Boolean | ValueType::Integer | ValueType::Decimal | ValueType::String
+            ) {
+                ta = ValueType::Primitive;
             }
-            (ValueType::Primitive, ValueType::Array) => Ok((
-                self.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
-                other,
-            )),
-            (ValueType::Primitive, ValueType::Object) => Ok((
-                self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
-                other,
-            )),
+            if matches!(
+                tb,
+                ValueType::Boolean | ValueType::Integer | ValueType::Decimal | ValueType::String
+            ) {
+                tb = ValueType::Primitive;
+            }
 
-            (ValueType::Array, ValueType::Primitive) => Ok((
-                self,
-                other.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
-            )),
-            (ValueType::Object, ValueType::Primitive) => Ok((
-                self,
-                other
-                    .as_object()
-                    .ok_or(ValueError::TypeConversion(ta, tb))?,
-            )),
+            match (ta, tb) {
+                (ValueType::Primitive, ValueType::Primitive) => {
+                    if let (Value::Primitive(p1), Value::Primitive(p2)) = (self, other) {
+                        let (t1, t2) = (p1.type_of(), p2.type_of());
+                        let (p1, p2) = p1.resolve(p2).ok_or(ValueError::TypeConversion(t1, t2))?;
+                        Ok((Value::Primitive(p1), Value::Primitive(p2)))
+                    } else {
+                        unreachable!("Both values are primitives")
+                    }
+                }
+                (ValueType::Primitive, ValueType::Array) => Ok((
+                    self.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other,
+                )),
+                (ValueType::Primitive, ValueType::Object) => Ok((
+                    self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other,
+                )),
 
-            (ValueType::Array, ValueType::Object) => Ok((
-                self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
-                other,
-            )),
-            (ValueType::Object, ValueType::Array) => Ok((
-                self,
-                other
-                    .as_object()
-                    .ok_or(ValueError::TypeConversion(ta, tb))?,
-            )),
+                (ValueType::Array, ValueType::Primitive) => Ok((
+                    self,
+                    other.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                )),
+                (ValueType::Object, ValueType::Primitive) => Ok((
+                    self,
+                    other
+                        .as_object()
+                        .ok_or(ValueError::TypeConversion(ta, tb))?,
+                )),
 
-            (ValueType::Array, ValueType::Range) => Ok((
-                self,
-                other.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
-            )),
-            (ValueType::Object, ValueType::Range) => Ok((
-                self,
-                other
-                    .as_object()
-                    .ok_or(ValueError::TypeConversion(ta, tb))?,
-            )),
-            (ValueType::Range, ValueType::Array) => Ok((
-                self.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
-                other,
-            )),
-            (ValueType::Range, ValueType::Object) => Ok((
-                self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
-                other,
-            )),
+                (ValueType::Array, ValueType::Object) => Ok((
+                    self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other,
+                )),
+                (ValueType::Object, ValueType::Array) => Ok((
+                    self,
+                    other
+                        .as_object()
+                        .ok_or(ValueError::TypeConversion(ta, tb))?,
+                )),
 
-            (ValueType::Array, ValueType::Array) => Ok((self, other)),
-            (ValueType::Object, ValueType::Object) => Ok((self, other)),
-            (ValueType::Range, ValueType::Range) => Ok((self, other)),
+                (ValueType::Array, ValueType::Range) => Ok((
+                    self,
+                    other.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                )),
+                (ValueType::Object, ValueType::Range) => Ok((
+                    self,
+                    other
+                        .as_object()
+                        .ok_or(ValueError::TypeConversion(ta, tb))?,
+                )),
+                (ValueType::Range, ValueType::Array) => Ok((
+                    self.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other,
+                )),
+                (ValueType::Range, ValueType::Object) => Ok((
+                    self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other,
+                )),
 
-            _ => Err(ValueError::TypeConversion(ta, tb)),
+                (ValueType::Array, ValueType::Array) => Ok((self, other)),
+                (ValueType::Object, ValueType::Object) => Ok((self, other)),
+                (ValueType::Range, ValueType::Range) => Ok((self, other)),
+
+                _ => Err(ValueError::TypeConversion(ta, tb)),
+            }
         }
     }
 
@@ -573,14 +583,21 @@ impl Value {
     /// Turns the value into an array, if possible
     pub fn as_array(self) -> Option<Self> {
         match self.type_of(None).ok()? {
-            ValueType::Primitive => Some(Value::Array([self].to_vec())),
+            ValueType::Integer
+            | ValueType::Decimal
+            | ValueType::String
+            | ValueType::Boolean
+            | ValueType::Primitive => Some(Value::Array([self].to_vec())),
             ValueType::Array => Some(self),
+
             _ => match self {
                 Value::Object(o) => Some(Value::Array(o.into_values().collect::<Vec<_>>())),
+
                 Value::Range(r) => Some(Value::Array(
                     r.map(|i| Value::Primitive(Primitive::Integer(i)))
                         .collect::<Vec<_>>(),
                 )),
+
                 _ => None,
             },
         }
@@ -603,19 +620,25 @@ impl Value {
                     .into_iter()
                     .collect(),
             )),
+
             Value::Array(a) => Some(Value::Object(
                 a.into_iter()
                     .enumerate()
                     .map(|(i, v)| (Primitive::Integer(i as i128), v))
                     .collect(),
             )),
+
             Value::Object(_) => Some(self),
+
             Value::Range(r) => Some(Value::Object(
                 r.into_iter()
                     .enumerate()
                     .map(|(i, v)| (Primitive::Integer(i as i128), Value::integer(v)))
                     .collect(),
             )),
+
+            Value::Function(f) => Some(Value::Object(f.docs.into_hashmap())),
+
             _ => None,
         }
     }
@@ -974,12 +997,8 @@ impl CheckedMatching for Value {
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Primitive(p) => {
-                write!(f, "{:?}", p)?;
-            }
-            Value::Function(fnt) => {
-                write!(f, "{:?}", fnt)?;
-            }
+            Value::Primitive(p) => write!(f, "{:?}", p)?,
+            Value::Function(fnc) => write!(f, "{}", fnc.docs.signature)?,
 
             Value::Array(a) => {
                 write!(f, "[")?;
@@ -1004,12 +1023,38 @@ impl std::fmt::Debug for Value {
                 write!(f, "{}..{}", r.start, r.end)?;
             }
 
-            Value::Reference(r, idx_path) => {
-                write!(f, "{r:?}")?;
-                for idx in idx_path.iter() {
-                    write!(f, "[{:?}]", idx)?;
-                }
+            Value::Reference(reference) => {
+                write!(f, "REF({:08X})", reference.hash())?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Primitive(v) => write!(f, "{}", v)?,
+            Value::Function(v) => write!(f, "{}", v.docs.signature)?,
+            Value::Array(v) => write!(
+                f,
+                "[{}]",
+                v.iter()
+                    .map(|v| format!("{v:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )?,
+            Value::Object(v) => write!(
+                f,
+                "{{{}}}",
+                v.iter()
+                    .map(|(k, v)| format!("{k:?}: {v:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )?,
+            Value::Range(v) => write!(f, "{}..{}", v.start, v.end)?,
+            Value::Reference(v) => write!(f, "{:?}", v)?,
         }
 
         Ok(())
@@ -1089,6 +1134,7 @@ impl SerializeToBytes for Value {
             }
 
             _ => Err(crate::traits::ByteDecodeError::MalformedData(
+                "Value".to_string(),
                 "Invalid value type".to_string(),
             )),
         }

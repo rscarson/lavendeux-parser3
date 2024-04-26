@@ -1,8 +1,17 @@
-use crate::traits::{ByteDecodeError, SerializeToBytes};
+use crate::{
+    traits::{ByteDecodeError, SerializeToBytes},
+    value::{Primitive, Value},
+};
 
 /// Function documentation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDocs {
+    /// The name of the function.
+    pub name: String,
+
+    /// The names of  the function's arguments.
+    pub args: Vec<String>,
+
     /// The category of the function.
     /// Defaults to "Misc"
     pub category: String,
@@ -23,6 +32,8 @@ pub struct FunctionDocs {
 impl Default for FunctionDocs {
     fn default() -> Self {
         Self {
+            name: "".to_string(),
+            args: Vec::new(),
             category: "Misc".to_string(),
             signature: "".to_string(),
             short: None,
@@ -43,7 +54,7 @@ impl FunctionDocs {
     /// //# Example code
     /// //# ``` (optional closing tag)
     /// ```
-    pub fn parse_docblock(lines: &[&str]) -> Self {
+    pub fn parse_docblock(name: &str, args: &[&str], lines: &[&str]) -> Self {
         // Check if the first line is a category line
         let mut iter = lines.iter().peekable();
 
@@ -87,19 +98,67 @@ impl FunctionDocs {
             _ => {}
         }
 
+        let desc = if desc.is_empty() { None } else { Some(desc) };
+
         Self {
+            name: name.to_string(),
+            args: args.iter().map(|s| s.to_string()).collect(),
             category,
             signature: "".to_string(),
             short,
-            desc: Some(desc),
+            desc,
             example,
         }
+    }
+
+    /// Convert the function documentation into a hashmap.
+    pub fn into_hashmap(self) -> std::collections::HashMap<Primitive, Value> {
+        let mut docs = std::collections::HashMap::new();
+
+        docs.insert(
+            Primitive::String("name".to_string()),
+            Value::string(self.name),
+        );
+
+        let args = self
+            .args
+            .into_iter()
+            .map(|arg| Value::string(arg))
+            .collect::<Vec<_>>();
+        docs.insert(Primitive::String("args".to_string()), Value::Array(args));
+
+        docs.insert(
+            Primitive::String("category".to_string()),
+            Value::string(self.category),
+        );
+
+        docs.insert(
+            Primitive::String("signature".to_string()),
+            Value::string(self.signature),
+        );
+
+        if let Some(short) = self.short {
+            docs.insert(Primitive::String("short".to_string()), Value::string(short));
+        }
+        if let Some(desc) = self.desc {
+            docs.insert(Primitive::String("desc".to_string()), Value::string(desc));
+        }
+        if let Some(example) = self.example {
+            docs.insert(
+                Primitive::String("example".to_string()),
+                Value::string(example),
+            );
+        }
+
+        docs
     }
 }
 
 impl SerializeToBytes for FunctionDocs {
     fn serialize_into_bytes(self) -> Vec<u8> {
         let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.name.serialize_into_bytes());
+        bytes.extend_from_slice(&self.args.serialize_into_bytes());
         bytes.extend_from_slice(&self.category.serialize_into_bytes());
         bytes.extend_from_slice(&self.signature.serialize_into_bytes());
         bytes.extend_from_slice(&self.short.serialize_into_bytes());
@@ -111,12 +170,16 @@ impl SerializeToBytes for FunctionDocs {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
+        let name = String::deserialize_from_bytes(bytes)?;
+        let args = Vec::<String>::deserialize_from_bytes(bytes)?;
         let category = String::deserialize_from_bytes(bytes)?;
         let signature = String::deserialize_from_bytes(bytes)?;
         let short = Option::<String>::deserialize_from_bytes(bytes)?;
         let desc = Option::<String>::deserialize_from_bytes(bytes)?;
         let example = Option::<String>::deserialize_from_bytes(bytes)?;
         Ok(Self {
+            name,
+            args,
             category,
             signature,
             short,

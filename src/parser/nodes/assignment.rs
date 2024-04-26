@@ -9,8 +9,9 @@ pratt_node!(AssignExprNode(target: Node<'source>, value: Node<'source>) {
 
     compile(this, compiler) {
         compiler.push_token(this.token);
-        this.target.compile(compiler)?;
+
         this.value.compile(compiler)?;
+        this.target.compile(compiler)?;
 
         compiler.push(OpCode::WREF);
 
@@ -33,13 +34,21 @@ pratt_node!(AssignExprNode(target: Node<'source>, value: Node<'source>) {
 pratt_node!(AssignArithmeticExprNode(target: Node<'source>, value: Node<'source>, op: ArithmeticOp) {
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::AssignArithmeticExpr);
-        let op = ArithmeticOp::from_rule(op.token().rule())?;
+        let op = match op.token().rule() {
+            Rule::AssignAdd => ArithmeticOp::Add,
+            Rule::AssignSub => ArithmeticOp::Sub,
+            Rule::AssignMul => ArithmeticOp::Mul,
+            Rule::AssignDiv => ArithmeticOp::Div,
+            Rule::AssignMod => ArithmeticOp::Mod,
+            Rule::AssignPow => ArithmeticOp::Pow,
+            _ => return None,
+        };
+
         Some(Self { target: lhs, value: rhs, op, token }.into_node())
     }
 
     compile(this, compiler) {
         compiler.push_token(this.token);
-        this.target.compile(compiler)?;
         compiler.push(OpCode::DUP); // Duplicate target reference, one for assignment and one for arithmetic operation
 
         this.value.compile(compiler)?;
@@ -54,6 +63,7 @@ pratt_node!(AssignArithmeticExprNode(target: Node<'source>, value: Node<'source>
             ArithmeticOp::Pow => OpCode::POW,
         });
 
+        this.target.compile(compiler)?;
         compiler.push(OpCode::WREF);
         Ok(())
     }
@@ -75,13 +85,19 @@ pratt_node!(AssignArithmeticExprNode(target: Node<'source>, value: Node<'source>
 pratt_node!(AssignBitwiseExprNode(target: Node<'source>, value: Node<'source>, op: BitwiseOp) {
     build(token, lhs, op, rhs) {
         token.set_rule(Rule::AssignBitwiseExpr);
-        let op = BitwiseOp::from_rule(op.token().rule())?;
+        let op = match op.token().rule() {
+            Rule::AssignAnd => BitwiseOp::And,
+            Rule::AssignOr => BitwiseOp::Or,
+            Rule::AssignXor => BitwiseOp::Xor,
+            Rule::AssignSL => BitwiseOp::ShiftLeft,
+            Rule::AssignSR => BitwiseOp::ShiftRight,
+            _ => return None,
+        };
         Some(Self { target: lhs, value: rhs, op, token }.into_node())
     }
 
     compile(this, compiler) {
         compiler.push_token(this.token);
-        this.target.compile(compiler)?;
         compiler.push(OpCode::DUP); // Duplicate target reference, one for assignment and one for arithmetic operation
 
         this.value.compile(compiler)?;
@@ -95,6 +111,7 @@ pratt_node!(AssignBitwiseExprNode(target: Node<'source>, value: Node<'source>, o
             BitwiseOp::ShiftRight => OpCode::SHR,
         });
 
+        this.target.compile(compiler)?;
         compiler.push(OpCode::WREF);
         Ok(())
     }

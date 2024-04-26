@@ -11,10 +11,21 @@ debug_compiler_internal = []
 debug = true
 
 [dependencies]
+
+# For lookup table generation
+lazy_static = "1.4.0"
+
+# For string to enum transformations
 strum = {version = "0.26.2", features=["derive"]}
 strum_macros = "0.26"
+
+# For stack allocation during parsing
 stacker = "0.1.15"
-lazy_static = "1.4.0"
+
+# Helper trait for the parser
+optional_transpose = "0.1.0"
+
+rand = "0.8.5"
 
 # Serde, for serialization features
 serde = "1.0.193"

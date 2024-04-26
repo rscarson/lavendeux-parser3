@@ -388,10 +388,10 @@ impl SerializeToBytes for Rule {
     ) -> Result<Self, crate::traits::ByteDecodeError> {
         let rule = u16::deserialize_from_bytes(bytes)?;
         if rule > Rule::Error as u16 {
-            return Err(crate::traits::ByteDecodeError::MalformedData(format!(
-                "Bad RuleID: {}",
-                rule
-            )));
+            return Err(crate::traits::ByteDecodeError::MalformedData(
+                "Rule".to_string(),
+                format!("No rule with ID #{}", rule),
+            ));
         }
 
         let rule = unsafe { std::mem::transmute::<u16, Rule>(rule) };

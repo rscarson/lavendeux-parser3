@@ -1,5 +1,5 @@
 use super::debug_profile::DebugProfile;
-use crate::{lexer::Token, value::ValueType, vm::OpCode};
+use crate::{lexer::Token, traits::SerializeToBytes, value::ValueType, vm::OpCode};
 use std::ops::Range;
 
 /// Options for the compiler
@@ -80,14 +80,14 @@ impl<'source> Compiler<'source> {
     /// Push a value to the bytecode
     /// Returns the index of the value
     pub fn push_i32(&mut self, value: i32) -> Range<usize> {
-        self.bytecode.extend(&value.to_be_bytes());
+        self.bytecode.extend(&value.serialize_into_bytes());
         self.bytecode.len() - 4..self.bytecode.len()
     }
 
     /// Push a value to the bytecode
     /// Returns the index of the value
     pub fn push_u64(&mut self, value: u64) -> Range<usize> {
-        self.bytecode.extend(&value.to_be_bytes());
+        self.bytecode.extend(&value.serialize_into_bytes());
         self.bytecode.len() - 8..self.bytecode.len()
     }
 
@@ -156,14 +156,14 @@ impl LoopCompilationExt for Compiler<'_> {
     fn end_loop(&mut self) {
         let (_, breaks) = self.loop_stack.pop().unwrap();
         for target in breaks {
-            let offset = self.bytecode.len() - target.end;
-            self.replace(target, offset.to_be_bytes().to_vec());
+            let pos = self.bytecode.len();
+            self.replace(target, pos.serialize_into_bytes());
         }
     }
 
     fn push_break(&mut self) {
         self.push(OpCode::JMP);
-        let target = self.push_i32(0);
+        let target = self.push_u64(0);
 
         let (_, breaks) = self.loop_stack.last_mut().unwrap();
         breaks.push(target);
@@ -172,8 +172,7 @@ impl LoopCompilationExt for Compiler<'_> {
     fn push_continue(&mut self) {
         self.push(OpCode::JMP);
         let start = self.loop_stack.last().unwrap().0;
-        let offset = self.bytecode.len() - start;
-        self.push_i32(offset as i32);
+        self.push_u64(start as u64);
     }
 }
 

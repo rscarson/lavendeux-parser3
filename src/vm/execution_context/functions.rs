@@ -1,5 +1,4 @@
 use crate::value::ValueType;
-use crate::vm::OpCode;
 use crate::{
     value::{Function, Value},
     vm::error::{RuntimeError, RuntimeErrorType},
@@ -51,28 +50,19 @@ impl FunctionExt for ExecutionContext<'_> {
     fn push_fn_signature(&mut self) -> Result<(), RuntimeError> {
         let function = self.pop()?;
         if let Value::Function(mut function) = function {
-            let name = self.decode_with_iterator::<String>()?;
-            let mut args = vec![];
-
-            let n_args = self.read_u16()? as usize;
-            if n_args != function.expects.len() {
-                return Err(self.emit_err(RuntimeErrorType::InvalidOpcode(OpCode::FSIG as u8)));
-            }
-            for i in 0..n_args {
-                let name = self.decode_with_iterator::<String>()?;
-                let default = (&function.expects[i].default).as_ref();
-                let ty = function.expects[i].ty;
-                args.push((name, ty, default));
-            }
-
-            let args = args
-                .into_iter()
-                .map(|(name, ty, default)| {
-                    let type_name = match ty {
+            let name = &function.docs.name;
+            let args = function
+                .docs
+                .args
+                .iter()
+                .zip(&function.expects)
+                .map(|(name, arg)| {
+                    let type_name = match arg.ty {
                         ValueType::All => "".to_string(),
-                        _ => format!(": {ty:?}"),
+                        _ => format!(": {}", arg.ty),
                     };
-                    let default = match default {
+
+                    let default = match arg.default.as_ref() {
                         Some(default) => format!(" = {default:?}"),
                         None => "".to_string(),
                     };
@@ -84,10 +74,11 @@ impl FunctionExt for ExecutionContext<'_> {
 
             let returns = match function.returns {
                 ValueType::All => "".to_string(),
-                _ => format!(" -> {:?}", function.returns),
+                _ => format!(" -> {}", function.returns),
             };
 
             function.docs.signature = format!("{name}({args}){returns}");
+            self.push(Value::Function(function));
         }
         Ok(())
     }
@@ -106,51 +97,56 @@ impl FunctionExt for ExecutionContext<'_> {
         .clone();
 
         // Resolve argument values
-        let mut expected_args = function.expects.iter().peekable();
-        let arguments = self.read_u64()? as usize;
-        if arguments > expected_args.len() {
+        let n_expected = function.expects.len();
+        let n_args = self.read_u64()? as usize;
+        if n_args > n_expected {
             return Err(self.emit_err(RuntimeErrorType::IncorrectFunctionArgs(
                 function.docs.signature.clone(),
             )));
         }
-        let mut args = Vec::with_capacity(arguments);
-        for _ in 0..arguments {
-            let value = self.pop()?;
-            loop {
-                match expected_args.next() {
-                    None => {
-                        return Err(self.emit_err(RuntimeErrorType::IncorrectFunctionArgs(
-                            function.docs.signature.clone(),
-                        )))
-                    }
-                    Some(arg) => {
-                        // Check type
-                        if value.is_type(arg.ty) {
-                            // If type matches, add to args
-                            args.push((arg.name_hash, value));
-                            break;
-                        } else if let Ok(value) = value.clone().cast(arg.ty) {
-                            // If type doesn't match, try to cast
-                            args.push((arg.name_hash, value));
-                            break;
-                        } else if let Some(default) = &arg.default {
-                            // If type doesn't match, check for default value
-                            args.push((arg.name_hash, default.clone()));
-                        } else {
-                            // If no default value, return error
-                            return Err(self.emit_err(RuntimeErrorType::IncorrectFunctionArgs(
-                                function.docs.signature.clone(),
-                            )));
-                        }
-                    }
+
+        let mut provided = vec![];
+        for _ in 0..n_args {
+            provided.push(self.pop()?);
+        }
+
+        let mut arguments = Vec::with_capacity(n_args);
+        let mut provided = provided.into_iter();
+        let mut expected = function.expects.into_iter();
+        loop {
+            let next_expected = match expected.next() {
+                Some(arg) => arg,
+                None => break,
+            };
+
+            match provided.next() {
+                Some(value) if value.is_type(next_expected.ty) => {
+                    arguments.push((next_expected.name_hash, value));
+                }
+
+                _ if next_expected.default.is_some() => {
+                    arguments.push((next_expected.name_hash, next_expected.default.unwrap()));
+                }
+
+                _ => {
+                    return Err(self.emit_err(RuntimeErrorType::IncorrectFunctionArgs(
+                        function.docs.signature.clone(),
+                    )));
                 }
             }
+        }
+
+        if arguments.len() != n_expected {
+            // Not enough arguments
+            return Err(self.emit_err(RuntimeErrorType::IncorrectFunctionArgs(
+                function.docs.signature.clone(),
+            )));
         }
 
         // Allocate new stack frame
         self.mem.scope_in();
         self.mem.scope_lock();
-        for (name, value) in args {
+        for (name, value) in arguments {
             self.mem.write(name, value);
         }
 

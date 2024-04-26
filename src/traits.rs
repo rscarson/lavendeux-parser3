@@ -30,20 +30,16 @@ impl<T: Iterator<Item = u8>> NextN for T {
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum ByteDecodeError {
     /// Buffer was too short
-    #[error("Unexpected end of data")]
-    UnexpectedEnd,
+    #[error("Unexpected end of data\n= In `{0}`")]
+    UnexpectedEnd(String),
 
     /// No data was available
-    #[error("No data available")]
-    NoData,
-
-    /// Invalid data was found in the header
-    #[error("Invalid header: {0}")]
-    InvalidHeader(String),
+    #[error("No data available\n= In `{0}`")]
+    NoData(String),
 
     /// Invalid data was found
-    #[error("Invalid data: {0}")]
-    MalformedData(String),
+    #[error("Invalid data: {1}\n= In `{0}`")]
+    MalformedData(String, String),
 }
 
 /// Trait for serializing and deserializing types to bytes
@@ -68,7 +64,9 @@ impl SerializeToBytes for i128 {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(16).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(16)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("i128".to_string()))?;
         let mut buf = [0; 16];
         buf.copy_from_slice(&bytes);
         Ok(i128::from_be_bytes(buf))
@@ -83,7 +81,9 @@ impl SerializeToBytes for u8 {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(1).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(1)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("u8".to_string()))?;
         let mut buf = [0; 1];
         buf.copy_from_slice(&bytes);
         Ok(u8::from_be_bytes(buf))
@@ -98,7 +98,9 @@ impl SerializeToBytes for i8 {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(1).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(1)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("i8".to_string()))?;
         let mut buf = [0; 1];
         buf.copy_from_slice(&bytes);
         Ok(i8::from_be_bytes(buf))
@@ -113,7 +115,9 @@ impl SerializeToBytes for i32 {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(4).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(4)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("i32".to_string()))?;
         let mut buf = [0; 4];
         buf.copy_from_slice(&bytes);
         Ok(i32::from_be_bytes(buf))
@@ -128,7 +132,9 @@ impl SerializeToBytes for u64 {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(8).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(8)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("u64".to_string()))?;
         let mut buf = [0; 8];
         buf.copy_from_slice(&bytes);
         Ok(u64::from_be_bytes(buf))
@@ -143,7 +149,9 @@ impl SerializeToBytes for usize {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(8).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(8)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("usize".to_string()))?;
         let mut buf = [0; 8];
         buf.copy_from_slice(&bytes);
         Ok(usize::from_be_bytes(buf))
@@ -158,7 +166,9 @@ impl SerializeToBytes for u16 {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
-        let bytes = bytes.next_n(2).ok_or(ByteDecodeError::UnexpectedEnd)?;
+        let bytes = bytes
+            .next_n(2)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("u16".to_string()))?;
         let mut buf = [0; 2];
         buf.copy_from_slice(&bytes);
         Ok(u16::from_be_bytes(buf))
@@ -179,9 +189,10 @@ impl SerializeToBytes for String {
         let len = u64::deserialize_from_bytes(bytes)?;
         let bytes = bytes
             .next_n(len as usize)
-            .ok_or(ByteDecodeError::UnexpectedEnd)?;
-        Ok(String::from_utf8(bytes)
-            .map_err(|_| ByteDecodeError::MalformedData("Invalid UTF-8".to_string()))?)
+            .ok_or_else(|| ByteDecodeError::UnexpectedEnd("String".to_string()))?;
+        Ok(String::from_utf8(bytes).map_err(|_| {
+            ByteDecodeError::MalformedData("String".to_string(), "Invalid UTF-8".to_string())
+        })?)
     }
 }
 
@@ -232,7 +243,10 @@ where
         match bytes.next() {
             Some(0) => Ok(None),
             Some(1) => Ok(Some(T::deserialize_from_bytes(bytes)?)),
-            _ => Err(ByteDecodeError::MalformedData("Invalid Option".to_string())),
+            _ => Err(ByteDecodeError::MalformedData(
+                "Option".to_string(),
+                "Invalid header".to_string(),
+            )),
         }
     }
 }

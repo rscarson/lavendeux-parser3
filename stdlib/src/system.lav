@@ -11,3 +11,113 @@
 //# echo("Hello, World!")
 //# 'test'.echo()
 echo(s: string): string = __syscalld(PRNT, s)
+
+// Function stub for the builtin disassemble function
+//# category: System
+//# Disassemble an expression
+//# This will return the disassembled code as a string
+//# ```lav
+//# disassemble("echo('Hello, World!')")
+dissasemble(s): string = nil
+
+//# category: System
+//# Draw a cool box around some text
+//# This will return a string with the text surrounded by a cool box
+//# ```lav
+//# draw_cool_box("Title", ["Line 1", "Line 2", "Line 3"])
+__draw_cool_box(title, lines) = {
+    // Grab the length of the longest line/title
+    max_len = max(
+        (for l in lines do len(l)) + len(title)
+    )
+
+    out = []
+
+    // Header portion
+    out += format("╔{}╗", ['═'.repeat(max_len+2)])
+    out += format("║ {} ║", [title.pad_right(max_len)])
+    out += format("╠{}╣", ['═'.repeat(max_len+2)])
+
+    // Body portion
+    for line in lines {
+        out += format("║ {} ║", [line.pad_right(max_len)])
+    }
+
+    // Footer portion
+    out += format("╚{}╝", ['═'.repeat(max_len+2)])
+
+    out.join('\n')
+}
+
+//# category: System
+//# Show help for available functions
+//# With no arguments, this will list all available functions
+//# If filtering, more detailed information will be shown for matching functions
+//# ```lav
+//# help()
+//# help("echo")
+//# help("system")
+help(filter: string = ""): string = {
+    functions = __syscalld(LSTFN)
+    echo("Processing functions "+ (functions as string)) // This seems to consume functions somehow
+
+    // Now we reorganize the functions into a dictionary by category
+    // We also filter out any functions that start with '__'
+    categories = {}
+    for f in functions {
+        f = f as object
+        echo("Processing function: " + f['name'])
+
+        if !(categories contains f['category']) {
+            categories[f['category']] = []
+        } else nil
+        categories[f['category']] = f
+    } where !((f as object)['name'] starts_with '__')
+
+    echo("Got categories: " + categories)
+
+    // If we're not filtering, we just list all the functions
+    if filter == "" {
+        out = ""
+        for category in categories {
+            lines = []
+            for f in categories[category] {
+                line = f['signature']
+                if f contains 'short' then line += ' ' + f['short'] else nil
+                lines += line
+            }
+
+            out += __draw_cool_box(category, lines) + '\n'
+            return out
+        }
+    } else {
+        // If we are filtering, we only show the functions that match
+        out = ""
+        for category in categories {
+            functions = for f in categories[category] {
+                title = f['signature']
+                lines = []
+                if f contains 'short' then lines += f['short'] else nil
+                if f contains 'desc' {
+                    for l in __syscalld(SSPLT, f['desc'], '\n') {
+                        lines += l
+                    }
+                } else nil
+
+                if f contains 'example' {
+                    for l in __syscalld(SSPLT, f['example'], '\n') {
+                        lines += l
+                    }
+                } else nil
+
+                out += __draw_cool_box(title, lines) + '\n'
+            } where {
+                f['name'] contains filter || f['category'] contains filter
+            }
+        }
+        
+        return out
+    }
+}
+
+help()

@@ -2,14 +2,17 @@
 //! Contains RuntimeError - the actual error wrapper
 //! and RuntimeErrorType - the different types of errors that can occur
 use super::OpCode;
-use crate::{compiler::DebugProfile, lexer::Token, traits::IntoOwned};
+use crate::{compiler::DebugProfile, lexer::Token, traits::IntoOwned, value::ValueType};
 
 /// The different types of errors that can occur during execution
+#[rustfmt::skip]
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum RuntimeErrorType {
+    //
     // This category of errors deals with issues in the bytecode
     // They are not caused by the user's code, but by a bug in the compiler
     //
+
     /// Bytecode ended unexpectedly
     #[error("An issue occurred with the Lavendeux VM - this is a bug\n= Unexpected end of bytecode while reading {0:?}")]
     UnexpectedEnd(OpCode),
@@ -32,26 +35,24 @@ pub enum RuntimeErrorType {
     )]
     Decode(OpCode, crate::traits::ByteDecodeError),
 
+    //
     // This category of errors deals with issues in the user's code
     //
-    /// A value was not found in the current scope
-    #[error("Could not find a value with the given name")]
-    NameError,
 
-    /// A bad reference was accessed
-    #[error("Invalid reference; Has the value been deleted?")]
-    BadReference,
+    /// Attempted to modify a read-only value
+    #[error("Cannot assign a constant\n= To assign a value use an identifier, like `a`, `name_2`, or `my_variable`")]
+    NotAReference,
 
     /// Attempt to build a range with invalid values
-    #[error("Invalid value types for range. Expected integers or characters")]
-    InvalidValuesForRange,
+    #[error("Cannot build a range of {0} values\n= Expected integers (0..10) or single-character strings ('a'..'z')")]
+    InvalidValuesForRange(ValueType),
 
     /// Attempt to build a range with invalid strings
-    #[error("Invalid strings for range. Expected single characters")]
+    #[error("Invalid strings for range.\n= Expected single characters")]
     InvalidStringsForRange,
 
     /// Failed attempt to index into a value
-    #[error("Index out of range")]
+    #[error("Collection does not contain that index")]
     IndexingValue,
 
     /// Attempt to index into a value using the wrong type

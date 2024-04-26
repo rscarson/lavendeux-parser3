@@ -41,9 +41,13 @@ fn exec_mode(options: CliOptions) -> Result<(), String> {
             let (profile, bytecode) = compile_bytecode(&options, tokens)?.decompose();
             output_bin(&options, bytecode)?;
 
-            if let Some(debug_path) = options.debug_path() {
-                let profile = profile.serialize_into_bytes();
-                write_bin(debug_path, profile)?;
+            match options.debug_path() {
+                Some(debug_path) if !debug_path.is_empty() => {
+                    let profile = profile.serialize_into_bytes();
+                    write_bin(debug_path, profile)?;
+                }
+
+                _ => {}
             }
         }
 
@@ -70,10 +74,13 @@ fn exec_mode(options: CliOptions) -> Result<(), String> {
             let bytes = functions.serialize_into_bytes();
             output_bin(&options, bytes)?;
 
-            if let Some(profile) = profile {
-                let debug_path = options.debug_path().unwrap();
-                let profile = profile.serialize_into_bytes();
-                write_bin(debug_path, profile)?;
+            match options.debug_path() {
+                Some(debug_path) if !debug_path.is_empty() => {
+                    let profile = profile.serialize_into_bytes();
+                    write_bin(debug_path, profile)?;
+                }
+
+                _ => {}
             }
         }
     }

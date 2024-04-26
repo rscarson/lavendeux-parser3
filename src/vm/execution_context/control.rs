@@ -10,20 +10,22 @@ pub trait ControlExt {
     fn jump_if_false(&mut self) -> Result<(), RuntimeError>;
     fn jump_if_true(&mut self) -> Result<(), RuntimeError>;
     fn jump_if_empty(&mut self) -> Result<(), RuntimeError>;
+    fn jump_if_not_empty(&mut self) -> Result<(), RuntimeError>;
 
-    fn jump_by(&mut self, offset: usize) -> Result<(), RuntimeError>;
+    fn is_empty(&mut self) -> Result<bool, RuntimeError>;
 }
 
 impl ControlExt for super::ExecutionContext<'_> {
     #[inline(always)]
     fn jump(&mut self) -> Result<(), RuntimeError> {
-        let offset = self.read_i32()?;
-        self.jump_by(offset as usize)
+        let pos = self.read_u64()?;
+        self.set_pc(pos as usize);
+        Ok(())
     }
 
     #[inline(always)]
     fn jump_if_false(&mut self) -> Result<(), RuntimeError> {
-        let offset = self.read_i32()?;
+        let pos = self.read_u64()?;
 
         let value = self.pop()?;
         let value = self.resolve_reference(value)?;
@@ -32,7 +34,8 @@ impl ControlExt for super::ExecutionContext<'_> {
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
 
         if !truthy {
-            self.jump_by(offset as usize)
+            self.set_pc(pos as usize);
+            Ok(())
         } else {
             Ok(())
         }
@@ -40,7 +43,7 @@ impl ControlExt for super::ExecutionContext<'_> {
 
     #[inline(always)]
     fn jump_if_true(&mut self) -> Result<(), RuntimeError> {
-        let offset = self.read_i32()?;
+        let pos = self.read_u64()?;
 
         let value = self.pop()?;
         let value = self.resolve_reference(value)?;
@@ -49,40 +52,40 @@ impl ControlExt for super::ExecutionContext<'_> {
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
 
         if truthy {
-            self.jump_by(offset as usize)
+            self.set_pc(pos as usize);
+            Ok(())
         } else {
             Ok(())
         }
     }
 
     #[inline(always)]
-    fn jump_if_empty(&mut self) -> Result<(), RuntimeError> {
-        let offset = self.read_i32()? as usize;
-        let value = self.pop()?;
-        let value = self.resolve_reference(value)?;
-        let is_empty = match value {
-            Value::Primitive(_) | Value::Function(_) | Value::Reference(..) => false,
-            Value::Array(a) => a.is_empty(),
-            Value::Object(o) => o.is_empty(),
-            Value::Range(r) => r.is_empty(),
-        };
-        if is_empty {
-            self.set_pc(
-                self.pc()
-                    .checked_add(offset)
-                    .ok_or(self.emit_err(RuntimeErrorType::UnexpectedEnd(self.last_opcode)))?,
-            );
+    fn jump_if_not_empty(&mut self) -> Result<(), RuntimeError> {
+        let pos = self.read_u64()? as usize;
+        if !self.is_empty()? {
+            self.set_pc(pos);
         }
         Ok(())
     }
 
     #[inline(always)]
-    fn jump_by(&mut self, offset: usize) -> Result<(), RuntimeError> {
-        self.set_pc(
-            self.pc()
-                .checked_add(offset)
-                .ok_or(self.emit_err(RuntimeErrorType::UnexpectedEnd(self.last_opcode)))?,
-        );
+    fn jump_if_empty(&mut self) -> Result<(), RuntimeError> {
+        let pos = self.read_u64()? as usize;
+        if self.is_empty()? {
+            self.set_pc(pos);
+        }
         Ok(())
+    }
+
+    #[inline(always)]
+    fn is_empty(&mut self) -> Result<bool, RuntimeError> {
+        let value = self.pop()?;
+        let value = self.resolve_reference(value)?;
+        Ok(match value {
+            Value::Primitive(_) | Value::Function(_) | Value::Reference(..) => false,
+            Value::Array(a) => a.is_empty(),
+            Value::Object(o) => o.is_empty(),
+            Value::Range(r) => r.is_empty(),
+        })
     }
 }

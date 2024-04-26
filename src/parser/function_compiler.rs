@@ -104,15 +104,6 @@ impl<'source> FunctionCompiler<'source> {
         // Update the function signature
         compiler.push(OpCode::FSIG);
 
-        compiler.extend(self.name.len().serialize_into_bytes());
-        compiler.extend(self.name.as_bytes().to_vec());
-
-        compiler.extend((arg_names.len() as u16).serialize_into_bytes());
-        for arg in arg_names {
-            compiler.extend(arg.len().serialize_into_bytes());
-            compiler.extend(arg.as_bytes().to_vec());
-        }
-
         // Finally, write the function to memory
         compiler.push(OpCode::WRFN);
 

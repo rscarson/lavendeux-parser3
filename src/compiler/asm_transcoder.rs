@@ -35,8 +35,8 @@ pub enum Instruction {
     /// An instruction that reads or writes to memory
     Mem(OpCode, u64),
 
-    /// An instruction that jumps to a relative offset
-    Jump(OpCode, i32),
+    /// An instruction that jumps to a position
+    Jump(OpCode, u64),
 
     /// An instruction that casts the top value on the stack to a different type
     Cast(ValueType),
@@ -49,9 +49,6 @@ pub enum Instruction {
 
     /// An instruction that creates a function argument
     FnArg(u16),
-
-    /// An instruction that adds debug information to a function
-    FnSig(String, Vec<String>),
 
     /// An instruction that adds documentation to a function
 
@@ -68,7 +65,7 @@ pub enum Instruction {
     Label(String),
 
     /// A jump instruction that points to a label
-    JumpTo(OpCode, String),
+    JumpTo(OpCode, String, u64),
 
     /// An error that occurred during disassembly
     Error(Error),
@@ -84,6 +81,8 @@ pub struct ASMTranscoder<'src> {
     buffer: std::iter::Copied<std::slice::Iter<'src, u8>>,
     debug_profile: Option<DebugProfile<'src>>,
     hashref: std::collections::HashMap<u64, String>,
+
+    label_jumps: bool,
 }
 impl<'src> ASMTranscoder<'src> {
     /// Create a new disassembler with the given bytecode buffer and debug profile (optional)
@@ -98,14 +97,22 @@ impl<'src> ASMTranscoder<'src> {
             buffer: buffer.iter().copied(),
             debug_profile,
             hashref: std::collections::HashMap::new(),
+            label_jumps: true,
         }
     }
 
     fn populate_instructions(&mut self) {
         self.all_instructions();
         self.add_debuginfo();
-        self.intersperse_labels();
+        if self.label_jumps {
+            self.intersperse_labels();
+        }
         self.process_functions();
+    }
+
+    /// Set whether to label jump instructions with their target labels
+    pub fn label_jumps(&mut self, label_jumps: bool) {
+        self.label_jumps = label_jumps;
     }
 
     /// Get all the instructions in the disassembled bytecode
@@ -123,7 +130,13 @@ impl<'src> ASMTranscoder<'src> {
         self.populate_instructions();
         let mut output = String::new();
 
-        for (instruction, _) in self.instructions.iter() {
+        let mut offset = 0;
+        for (instruction, len) in self.instructions.iter() {
+            if !self.label_jumps {
+                output.push_str(format!("{:08X}:\n", offset).as_str());
+            }
+            offset += len;
+
             match instruction {
                 Instruction::Simple(opcode) => output.push_str(&format!("  {opcode:?}\n")),
                 Instruction::Push(value) => output.push_str(&format!("  PUSH {value:?}\n")),
@@ -137,8 +150,8 @@ impl<'src> ASMTranscoder<'src> {
                     };
                     output.push_str(&format!("  {opcode:?} {label}\n"))
                 }
-                Instruction::Jump(opcode, offset) => {
-                    output.push_str(&format!("  {opcode:?} {offset:+}\n"))
+                Instruction::Jump(opcode, pos) => {
+                    output.push_str(&format!("  {opcode:?} {pos:08X}\n"))
                 }
                 Instruction::Cast(type_name) => output.push_str(&format!("  CAST {type_name:?}\n")),
                 Instruction::AcceptsN(opcode, n) => {
@@ -146,22 +159,23 @@ impl<'src> ASMTranscoder<'src> {
                 }
 
                 Instruction::MkFn(function) => {
-                    output.push_str(&format!("  MKFN {:08X}\n", function.name_hash))
+                    let label = format!("FN_{}", self.hashref.get(&function.name_hash).unwrap());
+                    output.push_str(&format!("  MKFN {label}\n"))
                 }
 
                 Instruction::FnArg(idx) => output.push_str(&format!("  FDFT {idx:02X}\n")),
-
-                Instruction::FnSig(s, a) => {
-                    output.push_str(&format!("  FSIG '{}' {:02X}\n", s, a.len()))
-                }
 
                 Instruction::FnCall(name_hash, n) => {
                     output.push_str(&format!("  CALL {name_hash:08X} {n}\n"))
                 }
 
                 Instruction::Label(label) => output.push_str(&format!("{label}:\n")),
-                Instruction::JumpTo(opcode, label) => {
-                    output.push_str(&format!("  {opcode:?} {label}\n"))
+                Instruction::JumpTo(opcode, label, pos) => {
+                    if self.label_jumps {
+                        output.push_str(&format!("  {opcode:?} {label}\n"))
+                    } else {
+                        output.push_str(&format!("  {opcode:?} ({pos:08X})\n"))
+                    }
                 }
 
                 Instruction::Comment(comment) => output.push_str(&format!(
@@ -236,14 +250,12 @@ impl<'src> ASMTranscoder<'src> {
     /// Replace all Jump(offset) instructions with JumpTo(label) instructions
     /// While inserting Label(label) instructions at the right places in the instruction list
     fn intersperse_labels(&mut self) {
-        let mut offset = 0;
         let mut labels = std::collections::HashMap::new();
 
-        for (instruction, len) in self.instructions.iter_mut() {
-            offset += *len as usize;
+        for (instruction, _) in self.instructions.iter_mut() {
             match instruction {
-                Instruction::Jump(opcode, jmp_len) => {
-                    let position = offset + *jmp_len as usize;
+                Instruction::Jump(opcode, pos) => {
+                    let position = *pos as usize;
                     let label = if !labels.contains_key(&position) {
                         let label = format!("JUMP_{}", self.labels.next());
                         labels.insert(position, label.clone());
@@ -251,7 +263,7 @@ impl<'src> ASMTranscoder<'src> {
                     } else {
                         labels.get(&position).unwrap().clone()
                     };
-                    *instruction = Instruction::JumpTo(*opcode, label);
+                    *instruction = Instruction::JumpTo(*opcode, label, *pos);
                 }
                 _ => {}
             }
@@ -261,15 +273,15 @@ impl<'src> ASMTranscoder<'src> {
             let mut i = 0;
             let mut offset = 0;
             for (_, len) in &self.instructions {
-                offset += *len;
                 if offset >= jmp_pos {
                     break;
                 }
+
+                offset += *len;
                 i += 1;
             }
 
-            self.instructions
-                .insert(i + 1, (Instruction::Label(label), 0));
+            self.instructions.insert(i, (Instruction::Label(label), 0));
         }
     }
 
@@ -280,10 +292,8 @@ impl<'src> ASMTranscoder<'src> {
                 let mut transcoder = ASMTranscoder::new(&function.body, function.debug.clone());
                 transcoder.populate_instructions();
                 let instructions = transcoder.instructions.clone();
-                functions.push((
-                    Instruction::Comment(format!("fn {:08X}", function.name_hash)),
-                    0,
-                ));
+                let label = self.hashref.get(&function.name_hash).unwrap();
+                functions.push((Instruction::Comment(format!("fn {label}")), 0));
                 functions.extend(instructions.into_iter());
             }
         }
@@ -296,6 +306,7 @@ impl<'src> ASMTranscoder<'src> {
         let opcode = self.buffer.next()?;
         let opcode = OpCode::from_u8(opcode)?;
 
+        println!("Opcode: {:?}", opcode);
         match &opcode {
             OpCode::PUSH => {
                 let len = self.buffer.len();
@@ -303,16 +314,16 @@ impl<'src> ASMTranscoder<'src> {
                 let value = Value::Primitive(value);
                 let len = len - self.buffer.len();
                 let instruction = Instruction::Push(value);
-                Some((instruction, 1 + 1 + len))
+                Some((instruction, 1 + len))
             }
 
-            OpCode::JMP | OpCode::JMPT | OpCode::JMPF => {
-                let offset = i32::deserialize_from_bytes(&mut self.buffer).ok()?;
-                let instruction = Instruction::Jump(opcode, offset);
+            OpCode::JMP | OpCode::JMPT | OpCode::JMPF | OpCode::JMPE | OpCode::JMPNE => {
+                let pos = u64::deserialize_from_bytes(&mut self.buffer).ok()?;
+                let instruction = Instruction::Jump(opcode, pos);
                 Some((instruction, 1 + 4))
             }
 
-            OpCode::WRIT | OpCode::READ | OpCode::DEL | OpCode::REF => {
+            OpCode::REF => {
                 let hash = u64::deserialize_from_bytes(&mut self.buffer).ok()?;
                 let instruction = Instruction::Mem(opcode, hash);
                 Some((instruction, 1 + 8))
@@ -324,7 +335,7 @@ impl<'src> ASMTranscoder<'src> {
                 Some((instruction, 1 + 1))
             }
 
-            OpCode::MKAR | OpCode::MKOB => {
+            OpCode::MKAR | OpCode::MKOB | OpCode::READF => {
                 let n = u64::deserialize_from_bytes(&mut self.buffer).ok()?;
                 let instruction = Instruction::AcceptsN(opcode, n);
                 Some((instruction, 1 + 4))
@@ -335,6 +346,7 @@ impl<'src> ASMTranscoder<'src> {
                 let _version = self.buffer.next()?;
                 let function = Function::deserialize_from_bytes(&mut self.buffer).ok()?;
                 let len = len - self.buffer.len();
+                self.hashref.insert(function.name_hash, self.labels.next());
                 let instruction = Instruction::MkFn(function);
                 Some((instruction, 1 + len))
             }
@@ -345,20 +357,6 @@ impl<'src> ASMTranscoder<'src> {
                 Some((instruction, 1 + 2))
             }
 
-            OpCode::FSIG => {
-                let len = self.buffer.len();
-                let name = String::deserialize_from_bytes(&mut self.buffer).ok()?;
-                let n_args = u16::deserialize_from_bytes(&mut self.buffer).ok()?;
-                let mut args = Vec::new();
-                for _ in 0..n_args {
-                    let name = String::deserialize_from_bytes(&mut self.buffer).ok()?;
-                    args.push(name);
-                }
-                let len = len - self.buffer.len();
-                let instruction = Instruction::FnSig(name, args);
-                Some((instruction, 1 + len))
-            }
-
             OpCode::CALL => {
                 let name_hash = u64::deserialize_from_bytes(&mut self.buffer).ok()?;
                 let n = u64::deserialize_from_bytes(&mut self.buffer).ok()?;
@@ -366,7 +364,71 @@ impl<'src> ASMTranscoder<'src> {
                 Some((instruction, 1 + 8 + 8))
             }
 
-            _ => Some((Instruction::Simple(opcode), 1)),
+            OpCode::POP
+            | OpCode::DUP
+            | OpCode::SWP
+            | OpCode::RREF
+            | OpCode::WREF
+            | OpCode::DREF
+            | OpCode::SCI
+            | OpCode::SCO
+            | OpCode::SCL
+            | OpCode::NEXT
+            | OpCode::LCST
+            | OpCode::MKRG
+            | OpCode::PSAR
+            | OpCode::PSOB
+            | OpCode::IDEX
+            | OpCode::ADD
+            | OpCode::SUB
+            | OpCode::MUL
+            | OpCode::DIV
+            | OpCode::REM
+            | OpCode::POW
+            | OpCode::NEG
+            | OpCode::AND
+            | OpCode::OR
+            | OpCode::XOR
+            | OpCode::NOT
+            | OpCode::SHL
+            | OpCode::SHR
+            | OpCode::EQ
+            | OpCode::NE
+            | OpCode::SEQ
+            | OpCode::SNE
+            | OpCode::LT
+            | OpCode::LE
+            | OpCode::GT
+            | OpCode::GE
+            | OpCode::LAND
+            | OpCode::LOR
+            | OpCode::LNOT
+            | OpCode::MTCH
+            | OpCode::CNTN
+            | OpCode::STWT
+            | OpCode::EDWT
+            | OpCode::WRFN
+            | OpCode::FSIG
+            | OpCode::RET
+            | OpCode::PRNT
+            | OpCode::LSTFN
+            | OpCode::LEN
+            | OpCode::SSPLT
+            | OpCode::TAN
+            | OpCode::SIN
+            | OpCode::COS
+            | OpCode::ATAN2
+            | OpCode::ATAN
+            | OpCode::ASIN
+            | OpCode::ACOS
+            | OpCode::TANH
+            | OpCode::SINH
+            | OpCode::COSH
+            | OpCode::ROUND
+            | OpCode::LOG
+            | OpCode::ILOG
+            | OpCode::ROOT
+            | OpCode::NOP => Some((Instruction::Simple(opcode), 1)),
         }
     }
 }
@@ -399,7 +461,10 @@ impl LabelGun {
     pub fn next(&mut self) -> String {
         let label = Self::to_basen(self.0);
         self.0 += 1;
-        label
+
+        // Prefix with a random dict entry
+        let rand = rand::random::<usize>() % Self::DICT.len();
+        Self::DICT[rand].to_owned() + "_" + &label
     }
 
     /// Convert a number to a human-readable label

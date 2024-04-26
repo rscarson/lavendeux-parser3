@@ -45,7 +45,7 @@ define_node!(ArrayNode(elements: Vec<Node<'source>>) {
         compiler.push_token(this.token);
 
         let len = this.elements.len();
-        this.elements.into_iter().map(|e| e.compile(compiler)).collect::<Result<Vec<_>, _>>()?;
+        this.elements.into_iter().rev().map(|e| e.compile(compiler)).collect::<Result<Vec<_>, _>>()?;
 
         compiler.push(OpCode::MKAR);
         compiler.push_u64(len as u64);
@@ -115,8 +115,8 @@ define_node!(ObjectNode(elements: Vec<(Node<'source>, Node<'source>)>) {
 
         let len = this.elements.len();
         this.elements.into_iter().map(|(k, v)| {
-            k.compile(compiler)?;
-            v.compile(compiler)
+            v.compile(compiler)?;
+            k.compile(compiler)
         }).collect::<Result<Vec<_>, _>>()?;
 
         compiler.push(OpCode::MKOB);

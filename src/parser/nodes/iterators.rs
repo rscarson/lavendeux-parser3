@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     compiler::LoopCompilationExt,
     lexer::{Rule, TokenSpan},
-    traits::IntoOwned,
+    traits::{IntoOwned, SerializeToBytes},
     vm::OpCode,
 };
 
@@ -140,39 +140,82 @@ define_node!(ForNode(
 
         compiler.push_token(this.token);
 
+        // An array to hold the result
+        compiler.push(OpCode::MKAR);
+        compiler.push_u64(0);
+
         // Compile the iteration variable
         this.expr.compile(compiler)?;
 
-        compiler.push(OpCode::SCI);
+        // Enter the loop block
         compiler.start_loop();
-        let len_pos = compiler.push_u64(0);
+        compiler.push(OpCode::SCI);
 
-        // The iterable variable
+        // Stack here is [result, iterable]
+        // End the loop if the iterable is empty
+        // We need to duplicate here, sadly
+        compiler.push(OpCode::DUP);
+        compiler.push(OpCode::JMPNE);
+        let jump_skp = compiler.push_u64(0);
+        compiler.push_break();
+        let pos = compiler.len() as u64;
+        compiler.replace(jump_skp, pos.serialize_into_bytes());
+
+
+        // Stack here is [result, iterable]
+        // This turns into [result, iterable, value]
         compiler.push(OpCode::NEXT);
+
+        // If the name is provided, set the reference
         if let Some(name) = name {
             compiler.push(OpCode::REF);
             compiler.push_strhash(&name);
             compiler.push(OpCode::WREF);
+            compiler.push(OpCode::POP);
         }
-        compiler.push(OpCode::POP);
 
-        // Conditional jump to the end of the loop
+        // Stack here is [result, iterable, value]
+        // So we can consume the value to check the filter
         if let Some(condition) = this.condition {
             condition.compile(compiler)?;
             compiler.push(OpCode::JMPT);
-            compiler.push_u64(1);
+            let shortjmp = compiler.push_u64(0);
             compiler.push_break();
+
+            compiler.replace(shortjmp, (compiler.len() as u64).serialize_into_bytes());
+        } else {
+            // If no condition is provided, we can skip the filter check
+            // By popping the value from the stack
+            compiler.push(OpCode::POP);
         }
 
+        // Stack here is [result, iterable]
+        // Swap them for the next step
+        compiler.push(OpCode::SWP);
+
+        // Now we have [iterable, result]
         // Compile the loop block
         this.block.compile(compiler)?;
+
+        // Stack now contains [iterable, result, last_result]
+        // Resolve the last value and add it to the result array
+        // We then swap the iterable back to the top of the stack
+        compiler.push(OpCode::PSAR);
+        compiler.push(OpCode::SWP);
+
+        // Continue the loop, remembering to reset the scope
+        compiler.push(OpCode::SCO);
         compiler.push_continue();
 
-        let len = compiler.len();
-        compiler.replace(len_pos, len.to_be_bytes().to_vec());
+        // End the loop
         compiler.end_loop();
         compiler.push(OpCode::SCO);
 
+        // Stack here is [result, empty]
+        // We need to pop the empty array
+        compiler.push(OpCode::POP);
+
+        // Stack here is [result]
         Ok(())
     }
 

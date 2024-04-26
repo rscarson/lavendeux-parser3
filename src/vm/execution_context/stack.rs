@@ -1,6 +1,9 @@
 use crate::{
     value::Value,
-    vm::error::{RuntimeError, RuntimeErrorType},
+    vm::{
+        error::{RuntimeError, RuntimeErrorType},
+        OpCode,
+    },
 };
 
 use super::IOExt;
@@ -37,11 +40,9 @@ impl StackExt for super::ExecutionContext<'_> {
 
     #[inline(always)]
     fn op_pop(&mut self) -> Result<(), RuntimeError> {
-        let value = self
-            .stack
+        self.stack
             .pop()
-            .ok_or(self.emit_err(RuntimeErrorType::BadReference))?;
-        self.push(value);
+            .ok_or(self.emit_err(RuntimeErrorType::StackEmpty(OpCode::POP)))?;
         Ok(())
     }
 

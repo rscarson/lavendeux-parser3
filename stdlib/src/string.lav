@@ -1,0 +1,17 @@
+/**
+ * Lavendeux Standard Library
+ * Copyright Richard Carson, 2024
+ * Licensed under the MIT License
+ */
+
+//# category: String
+//# Repeat a string n times
+//# ```lav
+//# repeat("Hello", 3) == "HelloHelloHello"
+repeat(s: string, n: integer): string = {
+    result = s
+    for i in 1..n-1 do {
+        result = result + s
+    }
+    s
+}

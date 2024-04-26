@@ -1,8 +1,32 @@
 use super::ValueType;
 
 /// An error that occurs during value operations
+#[rustfmt::skip]
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum ValueError {
+    //
+    // Errors during reference resolution
+    //
+
+    /// Caused by attempting to resolve a reference that is not in memory
+    #[error("Variable not defined\n= You can assign a value with `name = ...`")]
+    HashNotFound,
+
+    /// Caused by attempting to pull a value from a slot that is no longer valid
+    /// This should never happen, I think? It's a bug if it does probably
+    /// It would mean we leaked a reference without resolving it
+    #[error("A value reference is invalid.\n= This is likely a bug in the Lavendeux VM.")]
+    SlotRefInvalid,
+
+    /// Caused by attempting to use a reference that is not resolved
+    /// This is always a bug
+    #[error("A reference was used before it was resolved.\n= This is a bug in the Lavendeux VM.\n= Error occurred in `Reference::{0}()`")]
+    ReferenceNotResolved(String),
+
+    //
+    // Errors during casting and arithmetic operations
+    //
+
     /// Caused by operations overflowing a type
     #[error("Arithmetic overflow")]
     ArithmeticOverflow,
@@ -15,13 +39,9 @@ pub enum ValueError {
     #[error("Cannot resolve values of type {0} and {1}")]
     TypeConversion(ValueType, ValueType),
 
-    /// Caused by attempting to access a value by reference without resolving it
-    #[error("Unresolved reference. This is probably a bug.")]
-    UnresolvedReference,
-
-    /// Caused by attempting to access a value by reference that has been deleted
-    #[error("Invalid reference. Has the value been deleted?")]
-    BadReference,
+    //
+    // Errors during indexing
+    //
 
     /// Caused by attempting to access a value index that does not exist
     #[error("Key not found in object")]
@@ -42,6 +62,10 @@ pub enum ValueError {
     /// Caused by attempting to alter a value that is read-only
     #[error("Specified index is read-only")]
     ReadOnlyIndexing,
+
+    //
+    // Errors during regex operations
+    //
 
     /// An error caused by attempting to parse a regex literal
     /// Occurs during regex pattern compilation

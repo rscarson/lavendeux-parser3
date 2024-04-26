@@ -2,7 +2,7 @@
 //! Also provides scoping, referencing and functions
 
 use super::load_stdlib;
-use crate::value::Value;
+use crate::value::{Function, Value};
 
 /// A memory manager for storing variables and their values
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +21,22 @@ impl MemoryManager {
             locks: Vec::new(),
             frame_ptr: Vec::new(),
         }
+    }
+
+    /// Create a new memory manager with the same global scope as this one
+    pub fn create_child(&self) -> Self {
+        Self {
+            globals: self.globals.clone(),
+            stack: Vec::new(),
+            locks: Vec::new(),
+            frame_ptr: Vec::new(),
+        }
+    }
+
+    /// Merge the child memory manager into this one, keeping the global scope
+    /// of the child
+    pub fn eat_child(&mut self, child: Self) {
+        self.globals = child.globals;
     }
 
     /// Load the standard library into this memory manager
@@ -56,6 +72,21 @@ impl MemoryManager {
         while self.stack.len() < self.last_valid_scope() {
             self.locks.pop();
         }
+    }
+
+    /// Get a reference to all the functions in the memory manager
+    /// Only the global scope is checked for functions
+    pub fn all_functions(&self) -> Vec<&Function> {
+        self.globals
+            .iter()
+            .filter_map(|slot| match slot {
+                Slot::Occupied {
+                    value: Value::Function(func),
+                    ..
+                } => Some(func),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
     }
 
     /// Get a reference to all the global variables
@@ -212,7 +243,7 @@ impl MemoryManager {
                     version,
                     ..
                 } if name_hash == *slot_hash => {
-                    return Some(SlotRef::Stack {
+                    return Some(SlotRef::Global {
                         i,
                         name_hash,
                         version: *version,

@@ -1,9 +1,24 @@
-#!bin/sh
+#!/bin/bash
+# Copyright Richard Carson, 2024
+# Licensed under the MIT License
 
-# This script is used to build the standard library for the lavendeux project.
-# The standard library is a collection of functions available to the user
-# Because the library itself is a dependency of the project, it must be built
-# before the project can be built.
+# This script compiles the Lavendeux standard library.
+# The library will not include debug information unless the --debug flag is passed.
+# The production build should NOT include debug information.
+# Usage: compile.sh [--debug]
 
-cargo run --bin compiler -- -F -f stdlib/src/math.lav -o stdlib/math.bin --allow-syscalld
-cargo run --bin compiler -- -F -f stdlib/src/system.lav -o stdlib/system.bin --allow-syscalld
+DEBUG_FLAG=""
+
+# Check if --debug flag is passed
+if [ "$1" == "--debug" ]; then
+    DEBUG_FLAG="-D"
+fi
+
+# Define source file paths
+SOURCE_PATHS="stdlib/src/math.lav stdlib/src/system.lav"
+
+for p in $SOURCE_PATHS; do
+    echo "Compiling $p..."
+    cargo run --bin compiler -- -F -f "$p" -o "$(dirname "$p")/$(basename -s .lav "$p").bin" --allow-syscalld $DEBUG_FLAG
+    echo
+done

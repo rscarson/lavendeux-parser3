@@ -32,10 +32,10 @@ fn interactive_compiler() {
             let input = cmd.as_str();
             match lavendeux.run(input) {
                 Ok(value) => {
-                    println!("=> {:?}", value);
+                    println!("{}\n", value);
                 }
                 Err(e) => {
-                    eprintln!("{}", e);
+                    eprintln!("{}\n", e);
                 }
             }
         }
