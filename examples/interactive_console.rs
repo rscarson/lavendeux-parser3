@@ -1,4 +1,4 @@
-use lavendeux_parser::Lavendeux;
+use lavendeux_parser::{compiler::CompilerOptions, Lavendeux};
 
 const MIN_STACK_SIZE: usize = 32 * 1024 * 1024;
 
@@ -15,7 +15,10 @@ fn interactive_compiler() {
         stack.insert(0, "exit".to_string());
     }
 
-    let mut lavendeux = Lavendeux::new();
+    let mut lavendeux = Lavendeux::with_options(CompilerOptions {
+        allow_syscalld: true,
+        ..Default::default()
+    });
     loop {
         // Make sure we have a command ready
         if stack.is_empty() {

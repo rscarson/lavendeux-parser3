@@ -31,7 +31,7 @@ pub struct Function {
     pub expects: Vec<FunctionArgument>,
 
     /// The debug profile of the compiled function
-    pub debug: Option<DebugProfile<'static>>,
+    pub debug: Option<DebugProfile>,
 
     /// The documentation of the function
     pub docs: FunctionDocs,
@@ -138,7 +138,7 @@ impl SerializeToBytes for Function {
             )
         })?;
         let expects = Vec::<FunctionArgument>::deserialize_from_bytes(bytes)?;
-        let debug = Option::<DebugProfile<'static>>::deserialize_from_bytes(bytes)?;
+        let debug = Option::<DebugProfile>::deserialize_from_bytes(bytes)?;
         let docs = FunctionDocs::deserialize_from_bytes(bytes)?;
         let body = Vec::<u8>::deserialize_from_bytes(bytes)?;
 

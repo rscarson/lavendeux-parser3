@@ -13,7 +13,7 @@ pub trait IndexExt {
     fn index_into(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl IndexExt for super::ExecutionContext<'_> {
+impl IndexExt for super::ExecutionContext {
     #[inline(always)]
     fn index_into(&mut self) -> Result<(), RuntimeError> {
         // Ok this one is a bit of a workhorse

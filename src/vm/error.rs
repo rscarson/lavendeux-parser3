@@ -38,6 +38,29 @@ pub enum RuntimeErrorType {
     //
     // This category of errors deals with issues in the user's code
     //
+    
+    //
+    // Errors during reference resolution
+    //
+
+    /// Caused by attempting to resolve a reference that is not in memory
+    #[error("Variable not defined\n= You can assign a value with `name = ...`")]
+    HashNotFound,
+
+    /// Caused by attempting to pull a value from a slot that is no longer valid
+    /// This should never happen, I think? It's a bug if it does probably
+    /// It would mean we leaked a reference without resolving it
+    #[error("A value reference is invalid.\n= This is likely a bug in the Lavendeux VM.")]
+    SlotRefInvalid,
+
+    /// Caused by attempting to use a reference that is not resolved
+    /// This is always a bug
+    #[error("A reference was used before it was resolved.\n= This is a bug in the Lavendeux VM.\n= Error occurred in `Reference::{0}()`")]
+    ReferenceNotResolved(String),
+
+    /// Attempted to delete a constant value
+    #[error("Cannot delete a constant value\n= To delete a value use an identifier, like `a`, `name_2`, or `my_variable`")]
+    DeleteLiteral,
 
     /// Attempted to modify a read-only value
     #[error("Cannot assign a constant\n= To assign a value use an identifier, like `a`, `name_2`, or `my_variable`")]
@@ -107,7 +130,7 @@ impl std::fmt::Display for RuntimeError {
 
 impl RuntimeError {
     /// Add debug information to the error
-    pub fn with_context(self, debug_profile: &DebugProfile<'_>) -> Self {
+    pub fn with_context(self, debug_profile: &DebugProfile) -> Self {
         let token = debug_profile
             .current_token(self.pos)
             .map(|t| t.clone().into_owned());

@@ -10,7 +10,7 @@ use crate::{
 /// System call dispatcher
 /// Pushes all arguments to the stack and calls the given opcode
 pub fn __syscalld<'source>(
-    compiler: &mut Compiler<'source>,
+    compiler: &mut Compiler,
     op: OpCode,
     args: Vec<Node<'source>>,
 ) -> Result<(), CompilerError> {
@@ -23,7 +23,7 @@ pub fn __syscalld<'source>(
 }
 
 pub fn __dissasemble<'source>(
-    compiler: &mut Compiler<'source>,
+    compiler: &mut Compiler,
     expr: Node<'source>,
 ) -> Result<(), CompilerError> {
     let input = expr.token().input().to_string();
@@ -48,7 +48,7 @@ pub fn __dissasemble<'source>(
 }
 
 pub fn __include<'source>(
-    compiler: &mut Compiler<'source>,
+    compiler: &mut Compiler,
     token: Token<'source>,
     filename: String,
 ) -> Result<(), CompilerError> {

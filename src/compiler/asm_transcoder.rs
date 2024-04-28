@@ -79,7 +79,7 @@ pub struct ASMTranscoder<'src> {
     instructions: Vec<(Instruction, usize)>,
     labels: LabelGun,
     buffer: std::iter::Copied<std::slice::Iter<'src, u8>>,
-    debug_profile: Option<DebugProfile<'src>>,
+    debug_profile: Option<DebugProfile>,
     hashref: std::collections::HashMap<u64, String>,
 
     label_jumps: bool,
@@ -87,10 +87,7 @@ pub struct ASMTranscoder<'src> {
 impl<'src> ASMTranscoder<'src> {
     /// Create a new disassembler with the given bytecode buffer and debug profile (optional)
     /// If a debug profile is provided, the disassembler will add comments to the output
-    pub fn new<'buf: 'src, 'dbg: 'src>(
-        buffer: &'buf [u8],
-        debug_profile: Option<DebugProfile<'dbg>>,
-    ) -> Self {
+    pub fn new<'buf: 'src>(buffer: &'buf [u8], debug_profile: Option<DebugProfile>) -> Self {
         Self {
             instructions: Vec::new(),
             labels: LabelGun::new(),

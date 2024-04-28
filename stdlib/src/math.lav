@@ -14,7 +14,7 @@
 //# ```lav
 //# tan(to_radians(45)) == 1
 //# tan(PI) == 0
-tan(n: float): float = __syscalld(TAN, n)
+tan(n: numeric): float = __syscalld(TAN, n)
 
 //# category: Trigonometry
 //# Calculate the sine of a number, in radians.
@@ -22,7 +22,7 @@ tan(n: float): float = __syscalld(TAN, n)
 //# ```lav
 //# sin(to_radians(90)) == 1
 //# sin(PI) == 0
-sin(n: float): float = __syscalld(SIN, n)
+sin(n: numeric): float = __syscalld(SIN, n)
 
 //# category: Trigonometry
 //# Calculate the cosine of a number, in radians.
@@ -30,14 +30,14 @@ sin(n: float): float = __syscalld(SIN, n)
 //# ```lav
 //# cos(to_radians(0)) == 1
 //# cos(PI) == -1
-cos(n: float): float = __syscalld(COS, n)
+cos(n: numeric): float = __syscalld(COS, n)
 
 //# category: Trigonometry
 //# Calculate the arctangent2 of a number pair, in radians.
 //# use `to_radians` to convert degrees to radians.
 //# ```lav
 //# atan2(1, 1) == PI / 4
-atan2(y: float, x: float): float = __syscalld(ATAN2, y, x)
+atan2(y: numeric, x: numeric): float = __syscalld(ATAN2, y, x)
 
 //# category: Trigonometry
 //# Calculate the arctangent of a number, in radians.
@@ -45,7 +45,7 @@ atan2(y: float, x: float): float = __syscalld(ATAN2, y, x)
 //# ```lav
 //# atan(to_radians(1)) == PI / 4
 //# atan(0) == 0
-atan(n: float): float = __syscalld(ATAN, n)
+atan(n: numeric): float = __syscalld(ATAN, n)
 
 //# category: Trigonometry
 //# Calculate the arcsine of a number, in radians.
@@ -53,7 +53,7 @@ atan(n: float): float = __syscalld(ATAN, n)
 //# ```lav
 //# asin(to_radians(1)) == PI / 2
 //# asin(0) == 0
-asin(n: float): float = __syscalld(ASIN, n)
+asin(n: numeric): float = __syscalld(ASIN, n)
 
 //# category: Trigonometry
 //# Calculate the arccosine of a number, in radians.
@@ -61,32 +61,32 @@ asin(n: float): float = __syscalld(ASIN, n)
 //# ```lav
 //# acos(to_radians(1)) == 0
 //# acos(0) == PI / 2
-acos(n: float): float = __syscalld(ACOS, n)
+acos(n: numeric): float = __syscalld(ACOS, n)
 
 //# category: Trigonometry
 //# Calculate the hyperbolic tangent of a number.
 //# ```lav
 //# tanh(0) == 0
-tanh(n: float): float = __syscalld(TANH, n)
+tanh(n: numeric): float = __syscalld(TANH, n)
 
 //# category: Trigonometry
 //# Calculate the hyperbolic sine of a number.
 //# ```lav
 //# sinh(0) == 0
-sinh(n: float): float = __syscalld(SINH, n)
+sinh(n: numeric): float = __syscalld(SINH, n)
 
 //# category: Trigonometry
 //# Calculate the hyperbolic cosine of a number.
 //# ```lav
 //# cosh(0) == 1
-cosh(n: float): float = __syscalld(COSH, n)
+cosh(n: numeric): float = __syscalld(COSH, n)
 
 //# category: Trigonometry
 //# Convert degrees to radians.
 //# Used to call trigonometric functions with degrees.
 //# ```lav
 //# to_radians(180) == PI
-to_radians(n: float): float = n * PI / 180
+to_radians(n: numeric): float = n * PI / 180
 
 //
 // Rounding functions
@@ -97,27 +97,27 @@ to_radians(n: float): float = n * PI / 180
 //# ```lav
 //# floor(1.5) == 1
 //# floor(-1.5) == -2
-floor(n: float): float = n as int as float
+floor(n: numeric): float = n as int as float
 
 //# category: Math
 //# Truncate a number to the nearest integer greater than or equal to the number.
 //# ```lav
 //# ceil(1.5) == 2
 //# ceil(-1.5) == -1
-ceil(n: float): float = (n as int as float) + 1
+ceil(n: numeric): float = (n as int as float) + 1
 
 //# category: Math
 //# Returns the absolute value of a number.
 //# ```lav
 //# abs(1) == abs(-1)
-abs(n: float): float = if n < 0 then -n else n
+abs(n: numeric): float = if n < 0 then -n else n
 
 //# category: Math
 //# Round a number to a given precision.
 //# ```lav
 //# round(1.51) == 2
 //# round(-1.51, 1) == -1.5
-round(n: float, precision: int): float = __syscalld(ROUND, n, precision)
+round(n: numeric, precision: int): float = __syscalld(ROUND, n, precision)
 
 //
 // Logarithmic functions
@@ -127,37 +127,37 @@ round(n: float, precision: int): float = __syscalld(ROUND, n, precision)
 //# Calculate the logarithm of a number with a given base.
 //# ```lav
 //# log(100, 10) == 2
-log(n: float, base: float): float = __syscalld(LOG, n, base)
+log(n: numeric, base: numeric): float = __syscalld(LOG, n, base)
 
 //# category: Math
 //# Calculate the natural logarithm of a number.
 //# ```lav
 //# ln(E) == 1
-log2(n: float): float = __syscalld(LOG, n, 2)
+log2(n: numeric): float = __syscalld(LOG, n, 2)
 
 //# category: Math
 //# Calculate the base 10 logarithm of a number.
 //# ```lav
 //# log10(100) == 2
-log10(n: float): float = __syscalld(LOG, n, 10)
+log10(n: numeric): float = __syscalld(LOG, n, 10)
 
 //# category: Math
 //# Calculate the natural logarithm of a number.
 //# ```lav
 //# ln(E) == 1
-ln(n: float): float = __syscalld(LOG, n, E)
+ln(n: numeric): float = __syscalld(LOG, n, E)
 
 //# category: Math
 //# Calculate the logarithm of a number with a given base.
 //# ```lav
 //# log(100, 10) == 2
-ilog2(n: float): float = __syscalld(ILOG, n, 2)
+ilog2(n: numeric): float = __syscalld(ILOG, n, 2)
 
 //# category: Math
 //# Calculate the base 10 logarithm of a number.
 //# ```lav
 //# log10(100) == 2
-ilog(n: float, base: float): float = __syscalld(ILOG, n, base)
+ilog(n: numeric, base: numeric): float = __syscalld(ILOG, n, base)
 
 //
 // Misc functions
@@ -167,19 +167,19 @@ ilog(n: float, base: float): float = __syscalld(ILOG, n, base)
 //# Calculate the root of a number with a given base.
 //# ```lav
 //# root(4, 2) == 2
-root(n: float, base: float): float = __syscalld(ROOT, n, base)
+root(n: numeric, base: numeric): float = __syscalld(ROOT, n, base)
 
 //# category: Math
 //# Calculate the square root of a number.
 //# ```lav
 //# sqrt(4) == 2
-sqrt(n: float): float = __syscalld(ROOT, n, 2)
+sqrt(n: numeric): float = __syscalld(ROOT, n, 2)
 
 //# category: Math
 //# Calculate the cube root of a number.
 //# ```lav
 //# cbrt(8) == 2
-cbrt(n: float): float = __syscalld(ROOT, n, 3)
+cbrt(n: numeric): float = __syscalld(ROOT, n, 3)
 
 //# category: Math
 //# Returns the maximum of two numbers.

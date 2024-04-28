@@ -16,7 +16,7 @@ pub trait FunctionExt {
     fn ret_fn(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl FunctionExt for ExecutionContext<'_> {
+impl FunctionExt for ExecutionContext {
     fn alloc_fn(&mut self) -> Result<(), RuntimeError> {
         let function = self.pop()?;
         if let Value::Function(function) = function {
@@ -119,8 +119,13 @@ impl FunctionExt for ExecutionContext<'_> {
                 None => break,
             };
 
-            match provided.next() {
-                Some(value) if value.is_type(next_expected.ty) => {
+            let next = provided.next();
+            match next {
+                Some(value)
+                    if value
+                        .is_a(next_expected.ty, Some(&mut self.mem))
+                        .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))? =>
+                {
                     arguments.push((next_expected.name_hash, value));
                 }
 

@@ -137,7 +137,7 @@ fn build_ast(tokens: Vec<Token>) -> Result<Node, String> {
 fn compile_bytecode<'source>(
     options: &'source CliOptions,
     tokens: Vec<Token<'source>>,
-) -> Result<Compiler<'source>, String> {
+) -> Result<Compiler, String> {
     let ast = build_ast(tokens)?;
     let mut compiler = Compiler::new(
         options.src(),

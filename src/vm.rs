@@ -5,6 +5,9 @@
 
 mod load_stdlib;
 
+mod value_source;
+pub use value_source::ValueSource;
+
 pub mod error;
 pub mod memory_manager;
 

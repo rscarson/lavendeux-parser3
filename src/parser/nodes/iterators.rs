@@ -183,10 +183,6 @@ define_node!(ForNode(
             compiler.push_break();
 
             compiler.replace(shortjmp, (compiler.len() as u64).serialize_into_bytes());
-        } else {
-            // If no condition is provided, we can skip the filter check
-            // By popping the value from the stack
-            compiler.push(OpCode::POP);
         }
 
         // Stack here is [result, iterable]

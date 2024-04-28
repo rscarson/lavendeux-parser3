@@ -1,48 +1,77 @@
-use std::borrow::Cow;
-
 use crate::{
     lexer::{SerializedToken, Token},
-    traits::{IntoOwned, SerializeToBytes},
+    traits::SerializeToBytes,
 };
 
 /// Maps ranges in bytecode to source code locations.
 #[derive(Debug, Clone)]
-pub struct DebugProfile<'source> {
-    input: Cow<'source, str>,
-    source: Vec<(String, String)>,
+pub struct DebugProfile {
+    sources: Vec<(String, String)>,
     map: Vec<(usize, SerializedToken)>,
 }
 
-impl<'source> DebugProfile<'source> {
+impl DebugProfile {
     /// Create a new DebugProfile from the given source code.
-    pub fn new(input: &'source str) -> Self {
+    pub fn new(input: &str) -> Self {
         Self {
-            input: Cow::Borrowed(input),
+            sources: vec![(String::new(), input.to_string())],
             map: Vec::new(),
         }
     }
 
-    fn get(&'source self, index: usize) -> Option<Token<'source>> {
-        self.map
-            .get(index)
-            .map(move |(_, token)| SerializedToken::unpack(&token, &self.input))
+    /// Get the source code for the given filename
+    fn get_source(&self, filename: Option<&str>) -> Option<&str> {
+        match filename {
+            None => Some(&self.sources[0].1),
+            Some(filename) => {
+                for (name, source) in &self.sources {
+                    if name == filename {
+                        return Some(source);
+                    }
+                }
+
+                None
+            }
+        }
+    }
+
+    /// Get the token at the given index.
+    fn get(&self, index: usize) -> Option<(usize, Token<'_>)> {
+        let (start, packed) = self.map.get(index)?;
+        let source = self.get_source(packed.filename.as_deref())?;
+        let token = SerializedToken::unpack(packed, source);
+        Some((*start, token))
     }
 
     /// Insert a token into the profile.
-    pub fn insert(&mut self, start_pos: usize, token: Token<'source>) {
+    pub fn insert(&mut self, start_pos: usize, token: Token<'_>) {
+        if self.get_source(token.filename().as_deref()).is_none() {
+            self.sources.push((
+                token.filename().unwrap_or_default().to_string(),
+                token.input().to_string(),
+            ));
+        }
         self.map.push((start_pos, SerializedToken::pack(token)))
     }
 
     /// Offset all token source starts backwards by the given amount.
-    pub fn offset(&mut self, offset: usize) {
+    pub fn offset(&mut self, filename: Option<String>, offset: usize) {
+        for (name, source) in &mut self.sources {
+            if Some(name.as_str()) == filename.as_deref() {
+                *source = source[offset..].to_string();
+            }
+        }
         for (_, token) in &mut self.map {
+            if token.filename != filename {
+                continue;
+            }
             token.span.start -= offset;
             token.span.end -= offset;
         }
     }
 
     /// Get the token at the given index.
-    pub fn current_token(&'source self, index: usize) -> Option<Token<'source>> {
+    pub fn current_token(&self, index: usize) -> Option<Token<'_>> {
         // Search the map, returning the last token that starts before the index.
         let i = self.map.partition_point(|(start, _)| *start <= index);
         let i = match i {
@@ -50,37 +79,32 @@ impl<'source> DebugProfile<'source> {
             i => i - 1,
         };
 
-        self.get(i)
+        let (_, token) = self.get(i)?;
+        Some(token)
     }
 
     /// Get the source code for all tokens, mapped to their start position.
-    pub fn all_slices(&self) -> impl Iterator<Item = (usize, &str)> {
-        self.map
-            .iter()
-            .map(move |(start, token)| (*start, &self.input[token.span.clone()]))
+    pub fn all_slices(&self) -> impl Iterator<Item = (usize, String)> + '_ {
+        (0..self.map.len())
+            .map(|i| self.get(i).unwrap())
+            .map(|(s, t)| (s, t.slice().to_string()))
     }
 }
 
-impl IntoOwned for DebugProfile<'_> {
-    type Owned = DebugProfile<'static>;
-
-    fn into_owned(self) -> Self::Owned {
-        Self::Owned {
-            input: Cow::Owned(self.input.into_owned()),
-            map: self.map,
-        }
-    }
-}
-
-impl SerializeToBytes for DebugProfile<'_> {
+impl SerializeToBytes for DebugProfile {
     fn serialize_into_bytes(self) -> Vec<u8> {
-        let input = self.input.into_owned();
-        let tokens = self.map;
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&input.serialize_into_bytes());
 
-        bytes.extend_from_slice(&tokens.len().serialize_into_bytes());
-        for (start, token) in tokens {
+        // Serialize source map
+        bytes.extend_from_slice(&self.sources.len().serialize_into_bytes());
+        for (name, source) in self.sources {
+            bytes.extend_from_slice(&name.serialize_into_bytes());
+            bytes.extend_from_slice(&source.serialize_into_bytes());
+        }
+
+        // Serialize token map
+        bytes.extend_from_slice(&self.map.len().serialize_into_bytes());
+        for (start, token) in self.map {
             bytes.extend_from_slice(&start.serialize_into_bytes());
             bytes.extend_from_slice(&token.serialize_into_bytes());
         }
@@ -91,20 +115,22 @@ impl SerializeToBytes for DebugProfile<'_> {
     fn deserialize_from_bytes(
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, crate::traits::ByteDecodeError> {
-        let input = String::deserialize_from_bytes(bytes)?;
-        let tokens = usize::deserialize_from_bytes(bytes)?;
-
-        let mut inst = Self {
-            input: Cow::Owned(input),
-            map: Vec::with_capacity(tokens),
-        };
-
-        for _ in 0..tokens {
-            let start = usize::deserialize_from_bytes(bytes)?;
-            let token = SerializedToken::deserialize_from_bytes(bytes)?;
-            inst.map.push((start, token));
+        let nsources = usize::deserialize_from_bytes(bytes)?;
+        let mut sources = Vec::with_capacity(nsources);
+        for _ in 0..nsources {
+            let name = String::deserialize_from_bytes(bytes)?;
+            let source = String::deserialize_from_bytes(bytes)?;
+            sources.push((name, source));
         }
 
-        Ok(inst)
+        let ntokens = usize::deserialize_from_bytes(bytes)?;
+        let mut map = Vec::with_capacity(ntokens);
+        for _ in 0..ntokens {
+            let start = usize::deserialize_from_bytes(bytes)?;
+            let token = SerializedToken::deserialize_from_bytes(bytes)?;
+            map.push((start, token));
+        }
+
+        Ok(Self { sources, map })
     }
 }

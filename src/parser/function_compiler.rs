@@ -1,6 +1,6 @@
 use crate::{
     compiler::{Compiler, CompilerError, DebugProfile, FunctionDocs, HashString},
-    traits::{IntoOwned, SerializeToBytes},
+    traits::SerializeToBytes,
     value::{Function, FunctionArgument, Value, ValueType},
     vm::OpCode,
 };
@@ -24,7 +24,7 @@ pub struct FunctionCompiler<'source> {
     pub args: Vec<FunctionArgumentCompiler<'source>>,
     pub body: Node<'source>,
     pub ty: ValueType,
-    pub dbg: Option<DebugProfile<'source>>,
+    pub dbg: Option<DebugProfile>,
     pub doc: FunctionDocs,
 }
 
@@ -35,7 +35,7 @@ impl<'source> FunctionCompiler<'source> {
     // 3. Use FSIG to set the signature of the function: `FSIG {name} {arg names}`
     // 4. Use WRFN to write the function to memory
 
-    pub fn compile(self, compiler: &mut Compiler<'source>) -> Result<(), CompilerError> {
+    pub fn compile(self, compiler: &mut Compiler) -> Result<(), CompilerError> {
         let name_hash = self.name.hash_str();
 
         let mut arg_names = vec![];
@@ -68,15 +68,16 @@ impl<'source> FunctionCompiler<'source> {
 
         let function_slice = self.body.token().slice().to_string();
         let offset = self.body.token().span().start;
+        let filename = self.body.token().filename().map(|s| s.to_string());
 
         let mut fcompiler = Compiler::new(&function_slice, compiler.options().clone());
         self.body.compile(&mut fcompiler)?;
         fcompiler.push(OpCode::RET);
         let (mut debug, body) = fcompiler.decompose();
 
-        debug.offset(offset);
+        debug.offset(filename, offset);
         let debug = match compiler.options().debug {
-            true => Some(debug.into_owned()),
+            true => Some(debug),
             false => None,
         };
 

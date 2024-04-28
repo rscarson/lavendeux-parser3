@@ -1,6 +1,14 @@
 use super::*;
 use crate::{lexer::Rule, traits::IntoOwned, vm::OpCode};
 
+/*
+TODO
+lhs for assignments need a new node type
+a non-resolving reference
+
+We then adjust normal reference types to resolve IN compilation
+Then the compiler never needs to deal with em? Maybe a value cache eventually */
+
 pratt_node!(AssignExprNode(target: Node<'source>, value: Node<'source>) {
     build(token, lhs, _op, rhs) {
         token.set_rule(Rule::AssignExpr);

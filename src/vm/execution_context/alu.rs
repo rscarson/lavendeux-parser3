@@ -17,7 +17,7 @@ pub trait ALUExt {
         F: Fn(Value, Value) -> Result<Value, crate::value::ValueError>;
 }
 
-impl ALUExt for super::ExecutionContext<'_> {
+impl ALUExt for super::ExecutionContext {
     #[inline(always)]
     fn op_unary<F>(&mut self, handler: F) -> Result<(), RuntimeError>
     where

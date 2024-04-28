@@ -1,5 +1,5 @@
 use crate::{
-    compiler::DebugProfile,
+    compiler::{CompilerOptions, DebugProfile},
     error::Error,
     lexer::Stack,
     parser::{core::ScriptNode, ParserNode},
@@ -11,16 +11,29 @@ use crate::{
 /// Allows compiling and running Lavendeux source code
 pub struct Lavendeux {
     memory: Option<MemoryManager>,
+    options: CompilerOptions,
 }
 
 impl Lavendeux {
     /// Create a new Lavendeux instance
     /// Allocates a new memory manager for the instance
     pub fn new() -> Self {
+        Self {
+            memory: Some(MemoryManager::new()),
+            options: Default::default(),
+        }
+    }
+
+    /// Create a new Lavendeux instance with custom compiler options
+    /// Allocates a new memory manager for the instance
+    pub fn with_options(options: CompilerOptions) -> Self {
         let mut mem = MemoryManager::new();
         mem.load_stdlib();
 
-        Self { memory: Some(mem) }
+        Self {
+            memory: Some(mem),
+            options,
+        }
     }
 
     /// Compile a source string into a debug profile and bytecode.
@@ -41,14 +54,14 @@ impl Lavendeux {
     pub fn compile<'source>(
         &mut self,
         source: &'source str,
-    ) -> Result<(DebugProfile<'source>, Vec<u8>), Error> {
+    ) -> Result<(DebugProfile, Vec<u8>), Error> {
         let lexer = crate::lexer::Lexer::new(source);
         let tokens = lexer.all_tokens()?;
 
         let mut stack = Stack::new(tokens);
         let ast = ScriptNode::parse(&mut stack).ok_or(stack.emit_err())?;
 
-        let mut compiler = crate::compiler::Compiler::new(source, Default::default());
+        let mut compiler = crate::compiler::Compiler::new(source, self.options.clone());
         ast.compile(&mut compiler)?;
 
         Ok(compiler.decompose())
@@ -66,7 +79,7 @@ impl Lavendeux {
     pub fn execute<'source>(
         &mut self,
         bytecode: Vec<u8>,
-        profile: Option<DebugProfile<'source>>,
+        profile: Option<DebugProfile>,
     ) -> Result<Value, Error> {
         let mut context =
             ExecutionContext::with_mem(bytecode, profile, self.memory.take().unwrap());

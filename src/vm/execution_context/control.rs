@@ -15,7 +15,7 @@ pub trait ControlExt {
     fn is_empty(&mut self) -> Result<bool, RuntimeError>;
 }
 
-impl ControlExt for super::ExecutionContext<'_> {
+impl ControlExt for super::ExecutionContext {
     #[inline(always)]
     fn jump(&mut self) -> Result<(), RuntimeError> {
         let pos = self.read_u64()?;

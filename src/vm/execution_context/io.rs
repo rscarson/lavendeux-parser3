@@ -23,7 +23,7 @@ pub trait IOExt {
         T: SerializeToBytes;
 }
 
-impl IOExt for super::ExecutionContext<'_> {
+impl IOExt for super::ExecutionContext {
     fn next_byte(&mut self) -> Result<u8, RuntimeError> {
         self.set_pc(self.pc() + 1);
         match self.code().get(self.pc() - 1) {

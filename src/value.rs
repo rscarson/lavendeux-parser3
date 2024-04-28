@@ -283,7 +283,7 @@ impl Value {
     /// Cast a value to a type
     pub fn cast(self, typename: ValueType) -> Result<Self, ValueError> {
         let own_type = self.type_of(None)?;
-        if self.is_type(typename) {
+        if self.is_a(typename, None)? {
             Ok(self)
         } else {
             match typename {
@@ -334,34 +334,31 @@ impl Value {
     }
 
     /// Checks if the value is of a certain type
-    pub fn is_type(&self, typename: ValueType) -> bool {
-        let own_type = match self.type_of(None) {
-            Ok(t) => t,
-            Err(_) => return false,
-        };
+    pub fn is_a(
+        &self,
+        typename: ValueType,
+        mem: Option<&mut MemoryManager>,
+    ) -> Result<bool, ValueError> {
+        let a = self.type_of(mem)?;
+        Ok(match (a, typename) {
+            (
+                ValueType::Integer | ValueType::Decimal | ValueType::Boolean | ValueType::String,
+                ValueType::Primitive,
+            ) => true,
 
-        if own_type == typename {
-            return true;
-        }
+            (
+                ValueType::String | ValueType::Array | ValueType::Object | ValueType::Range,
+                ValueType::Collection,
+            ) => true,
 
-        match (own_type, typename) {
-            (ValueType::Boolean, ValueType::Primitive)
-            | (ValueType::Integer, ValueType::Primitive)
-            | (ValueType::Decimal, ValueType::Primitive)
-            | (ValueType::String, ValueType::Primitive) => true,
+            (ValueType::Boolean | ValueType::Integer | ValueType::Decimal, ValueType::Numeric) => {
+                true
+            }
 
-            (ValueType::Array, ValueType::Collection)
-            | (ValueType::Object, ValueType::Collection)
-            | (ValueType::Range, ValueType::Collection) => true,
-
-            (ValueType::Boolean, ValueType::Numeric)
-            | (ValueType::Integer, ValueType::Numeric)
-            | (ValueType::Decimal, ValueType::Numeric) => true,
-
-            (_, ValueType::All) => true,
+            _ if a == typename => true,
 
             _ => false,
-        }
+        })
     }
 
     /// Returns the type of the value
@@ -928,17 +925,18 @@ impl CheckedMatching for Value {
     }
 
     fn checked_contains(self, other: Self) -> Result<Self, ValueError> {
-        match self.resolve(other)? {
-            (Value::Primitive(Primitive::String(a)), Value::Primitive(Primitive::String(b))) => {
-                Value::checked_regex(&a, &b, |s| s)
+        Ok(match self {
+            Value::Range(v) => Value::boolean(v.contains(&other.cast_integer()?)),
+            Value::Array(v) => Value::boolean(v.contains(&other)),
+            Value::Object(v) => Value::boolean(v.contains_key(&other.cast_primitive()?)),
+
+            Value::Primitive(Primitive::String(a)) => {
+                let b = other.cast_string()?;
+                Value::checked_regex(&a, &b, |s| s)?
             }
 
-            (Value::Array(a), b) => Ok(Value::boolean(a.contains(&b))),
-            (Value::Object(a), b) => Ok(Value::boolean(a.contains_key(&b.cast_primitive()?))),
-            (Value::Range(a), b) => Ok(Value::boolean(a.contains(&b.cast_integer()?))),
-
-            (a, _) => Err(ValueError::InvalidOperationForType(a.type_of(None)?)),
-        }
+            _ => return Err(ValueError::InvalidOperationForType(self.type_of(None)?)),
+        })
     }
 
     fn checked_starts_with(self, other: Self) -> Result<Self, ValueError> {

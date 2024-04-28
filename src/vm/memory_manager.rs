@@ -53,7 +53,8 @@ impl MemoryManager {
 
     /// Lock the stack at the current depth, hiding values from higher scopes
     pub fn scope_lock(&mut self) {
-        self.locks.push(self.stack.len());
+        self.locks
+            .push(self.stack.len().checked_sub(1).unwrap_or(0));
     }
 
     /// Create a new stack frame starting at the current depth

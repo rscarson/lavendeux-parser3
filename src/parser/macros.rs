@@ -198,7 +198,7 @@ macro_rules! define_node {
             }
             fn parse($bstack_arg: &mut $crate::lexer::Stack<'source>) -> Option<$crate::parser::Node<'source>> $bblock
 
-            fn compile(self, $ccompilerarg: &mut $crate::compiler::Compiler<'source>) -> Result<(), $crate::compiler::CompilerError> {
+            fn compile(self, $ccompilerarg: &mut $crate::compiler::Compiler) -> Result<(), $crate::compiler::CompilerError> {
                 let $cselfarg = self;
                 $cblock
             }
@@ -241,7 +241,7 @@ macro_rules! pratt_node {
                 $(, $br_arg: Node<'source>)?
             ) -> Option<$crate::parser::Node<'source>> $bblock
 
-            pub fn compile(self, $ccompilerarg: &mut $crate::compiler::Compiler<'source>) -> Result<(), $crate::compiler::CompilerError> {
+            pub fn compile(self, $ccompilerarg: &mut $crate::compiler::Compiler) -> Result<(), $crate::compiler::CompilerError> {
                 let $cselfarg = self;
                 $cblock
             }
@@ -303,7 +303,7 @@ macro_rules! define_parser {
                 }
             }
 
-            pub fn compile(self, compiler: &mut $crate::compiler::Compiler<'source>) -> Result<(), $crate::compiler::CompilerError> {
+            pub fn compile(self, compiler: &mut $crate::compiler::Compiler) -> Result<(), $crate::compiler::CompilerError> {
                 match self {
                     Self::Error(e) => Err(e.into()),
                     $(

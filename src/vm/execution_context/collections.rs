@@ -16,7 +16,7 @@ pub trait CollectionExt {
     fn push_object(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl CollectionExt for super::ExecutionContext<'_> {
+impl CollectionExt for super::ExecutionContext {
     #[inline(always)]
     fn make_array(&mut self) -> Result<(), RuntimeError> {
         let n = self.read_u64()? as usize;

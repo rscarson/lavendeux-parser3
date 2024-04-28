@@ -20,6 +20,14 @@ echo(s: string): string = __syscalld(PRNT, s)
 //# disassemble("echo('Hello, World!')")
 dissasemble(s): string = nil
 
+// Function stub for the builtin include function
+//# category: System
+//# Include a file
+//# This will include the contents of a file into the current script
+//# All functions and global variables will be available after the include
+//# ```lav
+//# include("file.lav")
+
 //# category: System
 //# Draw a cool box around some text
 //# This will return a string with the text surrounded by a cool box
@@ -59,14 +67,13 @@ __draw_cool_box(title, lines) = {
 //# help("system")
 help(filter: string = ""): string = {
     functions = __syscalld(LSTFN)
-    echo("Processing functions "+ (functions as string)) // This seems to consume functions somehow
+    echo("tst")
 
     // Now we reorganize the functions into a dictionary by category
     // We also filter out any functions that start with '__'
     categories = {}
     for f in functions {
         f = f as object
-        echo("Processing function: " + f['name'])
 
         if !(categories contains f['category']) {
             categories[f['category']] = []
@@ -74,9 +81,8 @@ help(filter: string = ""): string = {
         categories[f['category']] = f
     } where !((f as object)['name'] starts_with '__')
 
-    echo("Got categories: " + categories)
-
     // If we're not filtering, we just list all the functions
+    echo (filter)
     if filter == "" {
         out = ""
         for category in categories {
@@ -119,5 +125,3 @@ help(filter: string = ""): string = {
         return out
     }
 }
-
-help()

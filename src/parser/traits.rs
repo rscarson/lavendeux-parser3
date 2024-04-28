@@ -13,6 +13,6 @@ where
     /// Compile the node into bytecode
     fn compile(
         self,
-        compiler: &mut crate::compiler::Compiler<'source>,
+        compiler: &mut crate::compiler::Compiler,
     ) -> Result<(), crate::compiler::CompilerError>;
 }

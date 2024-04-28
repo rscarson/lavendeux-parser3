@@ -33,25 +33,25 @@ use stack::StackExt;
 /// This is the actual VM that runs the bytecode.
 /// In practice you should access this through the `Lavendeux` struct.
 #[derive(Debug, Clone)]
-pub struct ExecutionContext<'source> {
+pub struct ExecutionContext {
     stack: Vec<Value>,
     mem: MemoryManager,
     last_opcode: OpCode,
 
     context: Vec<(
-        Vec<u8>,                       // code
-        usize,                         // pc
-        Option<DebugProfile<'source>>, // debug profile
-        ValueType,                     // return type
+        Vec<u8>,              // code
+        usize,                // pc
+        Option<DebugProfile>, // debug profile
+        ValueType,            // return type
     )>,
 }
 
-impl<'source> ExecutionContext<'source> {
+impl ExecutionContext {
     /// Creates a new execution context with the given bytecode and debug profile.
     /// Uses the specified memory manager.
     pub fn with_mem(
         code: Vec<u8>,
-        debug_profile: Option<DebugProfile<'source>>,
+        debug_profile: Option<DebugProfile>,
         mem: MemoryManager,
     ) -> Self {
         ExecutionContext {
@@ -64,7 +64,7 @@ impl<'source> ExecutionContext<'source> {
 
     /// Creates a new execution context with the given bytecode and debug profile.
     /// Uses a new memory manager.
-    pub fn new(code: Vec<u8>, debug_profile: Option<DebugProfile<'source>>) -> Self {
+    pub fn new(code: Vec<u8>, debug_profile: Option<DebugProfile>) -> Self {
         Self::with_mem(code, debug_profile, MemoryManager::new())
     }
 
@@ -84,7 +84,7 @@ impl<'source> ExecutionContext<'source> {
     }
 
     /// Read the current context's debug profile
-    pub fn debug_profile(&self) -> Option<&DebugProfile<'source>> {
+    pub fn debug_profile(&self) -> Option<&DebugProfile> {
         self.context.last().unwrap().2.as_ref()
     }
 
@@ -98,7 +98,7 @@ impl<'source> ExecutionContext<'source> {
     fn push_context(
         &mut self,
         code: Vec<u8>,
-        debug_profile: Option<DebugProfile<'source>>,
+        debug_profile: Option<DebugProfile>,
         ret_type: ValueType,
     ) {
         self.context.push((code, 0, debug_profile, ret_type));
@@ -152,7 +152,7 @@ impl<'source> ExecutionContext<'source> {
     pub fn next(&mut self) -> Result<(), RuntimeError> {
         let opcode = self.read_opcode()?;
 
-        //#[cfg(feature = "debug_compiler_internal")]
+        #[cfg(feature = "debug_compiler_internal")]
         {
             print!("{:?} ", opcode);
             println!("stack={:?}", self.stack);

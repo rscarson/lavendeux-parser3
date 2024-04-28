@@ -14,7 +14,7 @@ pub trait RefExt {
     fn delete_reference(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl RefExt for super::ExecutionContext<'_> {
+impl RefExt for super::ExecutionContext {
     #[inline(always)]
     fn resolve_reference(&mut self, value: Value) -> Result<Value, RuntimeError> {
         match value {

@@ -238,10 +238,9 @@ impl std::fmt::Debug for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{:?}({}:{:?} `{}`)",
+            "{:?} => {} => {}",
             self.rule,
-            self.line(),
-            self.span(),
+            format!("{:?}:{} [{:?}]", self.filename(), self.line(), self.span()),
             self.slice().replace("\n", "\\n")
         )
     }

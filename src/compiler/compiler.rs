@@ -23,16 +23,16 @@ impl Default for CompilerOptions {
 /// Compiles source code into bytecode
 /// You don't need to use this directly, use the `compile` function on a `Node` instead
 #[derive(Debug, Clone)]
-pub struct Compiler<'source> {
+pub struct Compiler {
     bytecode: Vec<u8>,
     loop_stack: Vec<(usize, Vec<Range<usize>>)>, // (start, break targets)
-    debug: DebugProfile<'source>,
+    debug: DebugProfile,
     options: CompilerOptions,
 }
 
-impl<'source> Compiler<'source> {
+impl Compiler {
     /// Create a new compiler
-    pub fn new(input: &'source str, options: CompilerOptions) -> Self {
+    pub fn new(input: &str, options: CompilerOptions) -> Self {
         Self {
             bytecode: Vec::new(),
             loop_stack: Vec::new(),
@@ -49,7 +49,7 @@ impl<'source> Compiler<'source> {
     /// Push a token to the debug profile
     /// This is used to map bytecode instructions to source code
     /// during error reporting
-    pub fn push_token(&mut self, token: Token<'source>) {
+    pub fn push_token(&mut self, token: Token<'_>) {
         if self.options.debug {
             self.debug.insert(self.bytecode.len(), token);
         }
@@ -128,7 +128,7 @@ impl<'source> Compiler<'source> {
     }
 
     /// Decompose the compiler into its components
-    pub fn decompose(self) -> (DebugProfile<'source>, Vec<u8>) {
+    pub fn decompose(self) -> (DebugProfile, Vec<u8>) {
         (self.debug, self.bytecode)
     }
 }
@@ -148,7 +148,7 @@ pub trait LoopCompilationExt {
     fn push_continue(&mut self);
 }
 
-impl LoopCompilationExt for Compiler<'_> {
+impl LoopCompilationExt for Compiler {
     fn start_loop(&mut self) {
         self.loop_stack.push((self.bytecode.len(), Vec::new()));
     }

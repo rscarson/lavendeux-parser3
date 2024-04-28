@@ -18,7 +18,7 @@ pub trait StackExt {
     fn dup(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl StackExt for super::ExecutionContext<'_> {
+impl StackExt for super::ExecutionContext {
     #[inline(always)]
     fn pop(&mut self) -> Result<Value, RuntimeError> {
         self.stack
