@@ -17,6 +17,7 @@ pub struct FunctionArgumentCompiler<'source> {
     pub name: String,
     pub default: FunctionArgumentDefault<'source>,
     pub ty: ValueType,
+    pub by_ref: bool,
 }
 
 pub struct FunctionCompiler<'source> {
@@ -47,17 +48,20 @@ impl<'source> FunctionCompiler<'source> {
                 FunctionArgumentDefault::None => args.push(FunctionArgument {
                     name_hash: arg.name.hash_str(),
                     ty: arg.ty,
+                    by_ref: arg.by_ref,
                     default: None,
                 }),
                 FunctionArgumentDefault::Static(value) => args.push(FunctionArgument {
                     name_hash: arg.name.hash_str(),
                     ty: arg.ty,
+                    by_ref: arg.by_ref,
                     default: Some(value),
                 }),
                 FunctionArgumentDefault::Stack(node) => {
                     args.push(FunctionArgument {
                         name_hash: arg.name.hash_str(),
                         ty: arg.ty,
+                        by_ref: arg.by_ref,
                         default: None,
                     });
                     arg_defaults.push((i as u16, node));

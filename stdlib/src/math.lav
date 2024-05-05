@@ -182,14 +182,32 @@ sqrt(n: numeric): float = __syscalld(ROOT, n, 2)
 cbrt(n: numeric): float = __syscalld(ROOT, n, 3)
 
 //# category: Math
-//# Returns the maximum of two numbers.
+//# Returns the maximum value in an array.
+//# See 'sort' for information on how types are compared.
 //# ```lav
-//# max(1, 2) == 2
-max(a: numeric, b: numeric): numeric = if a > b then a else b
+//# max([1, 2]) == 2
+max(input: array) = if input.len() {
+    max = input[0]
+    for i in 1..input.len() {
+        if input[i] > max {
+            max = input[i]
+        } else nil
+    }
+    max
+} else throw("max: Array is empty.")
 
 //# category: Math
-//# Returns the minimum of two numbers.
+//# Returns the minimum value in an array.
+//# See 'sort' for information on how types are compared.
 //# ```lav
-//# min(1, 2) == 1
-min(a: numeric, b: numeric): numeric = if a < b then a else b
+//# min([1, 2]) == 1
+min(input: array) = if input.len() {
+    min = input[0]
+    for i in 1..input.len() {
+        if input[i] < min {
+            min = input[i]
+        } else nil
+    }
+    min
+} else throw("min: Array is empty.")
 

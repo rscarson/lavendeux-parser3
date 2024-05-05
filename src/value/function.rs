@@ -2,7 +2,10 @@ use super::{Value, ValueType};
 use crate::{
     compiler::{DebugProfile, FunctionDocs},
     traits::{ByteDecodeError, SerializeToBytes},
-    vm::memory_manager::{MemoryManager, Slot},
+    vm::{
+        memory_manager::{MemoryManager, Slot},
+        value_source::ValueSource,
+    },
 };
 
 /// An argument to a function.
@@ -13,6 +16,9 @@ pub struct FunctionArgument {
 
     /// The expected type of the argument
     pub ty: ValueType,
+
+    /// Whether the argument is passed by reference
+    pub by_ref: bool,
 
     /// The default value of the argument
     pub default: Option<Value>,
@@ -47,6 +53,18 @@ impl PartialEq for Function {
 }
 impl Eq for Function {}
 
+impl Ord for Function {
+    fn cmp(&self, _: &Self) -> std::cmp::Ordering {
+        std::cmp::Ordering::Equal
+    }
+}
+
+impl PartialOrd for Function {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        Some(std::cmp::Ordering::Equal)
+    }
+}
+
 /// Represents a set of compiled functions.
 /// This is used to store functions in a memory manager.
 /// The stdlib works this way
@@ -58,7 +76,11 @@ impl StdFunctionSet {
     /// Populate a memory manager with the functions in this set.
     pub fn into_mem(self, mem: &mut MemoryManager) {
         for function in self.functions {
-            mem.write_global(function.name_hash, Value::Function(function), true);
+            mem.write_global(
+                function.name_hash,
+                ValueSource::Literal(Value::Function(function)),
+                true,
+            );
         }
     }
 
@@ -68,7 +90,7 @@ impl StdFunctionSet {
         for slot in mem.all_globals() {
             match slot {
                 Slot::Occupied { value, .. } => {
-                    if let Value::Function(function) = value {
+                    if let ValueSource::Literal(Value::Function(function)) = value {
                         functions.push(function.clone());
                     }
                 }
@@ -86,6 +108,7 @@ impl SerializeToBytes for FunctionArgument {
 
         bytes.extend(self.name_hash.serialize_into_bytes());
         bytes.push(self.ty as u8);
+        bytes.push(self.by_ref as u8);
         bytes.extend(self.default.serialize_into_bytes());
 
         bytes
@@ -102,12 +125,14 @@ impl SerializeToBytes for FunctionArgument {
                 "Invalid argument type".to_string(),
             )
         })?;
+        let by_ref = u8::deserialize_from_bytes(bytes)? != 0;
         let default = Option::<Value>::deserialize_from_bytes(bytes)?;
 
         Ok(Self {
             name_hash,
             ty,
             default,
+            by_ref,
         })
     }
 }
@@ -164,5 +189,11 @@ impl SerializeToBytes for StdFunctionSet {
         Ok(Self {
             functions: Vec::<Function>::deserialize_from_bytes(bytes)?,
         })
+    }
+}
+
+impl std::fmt::Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.docs.signature)
     }
 }

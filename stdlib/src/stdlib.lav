@@ -1,0 +1,4 @@
+include("stdlib/src/collections.lav")
+include("stdlib/src/string.lav")
+include("stdlib/src/math.lav")
+include("stdlib/src/system.lav")

@@ -129,12 +129,13 @@ impl CheckedArithmetic for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a ^ b)),
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(
-                a.checked_add(b).ok_or(ValueError::ArithmeticOverflow)?,
+                a.checked_add(b)
+                    .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             )),
             (Primitive::Decimal(a), Primitive::Decimal(b)) => {
                 Ok(Primitive::Decimal(a.checked_add(b)?))
@@ -151,13 +152,14 @@ impl CheckedArithmetic for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
 
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a ^ b)),
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(
-                a.checked_sub(b).ok_or(ValueError::ArithmeticOverflow)?,
+                a.checked_sub(b)
+                    .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             )),
             (Primitive::Decimal(a), Primitive::Decimal(b)) => {
                 Ok(Primitive::Decimal(a.checked_sub(b)?))
@@ -175,12 +177,13 @@ impl CheckedArithmetic for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a && b)),
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(
-                a.checked_mul(b).ok_or(ValueError::ArithmeticOverflow)?,
+                a.checked_mul(b)
+                    .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             )),
             (Primitive::Decimal(a), Primitive::Decimal(b)) => {
                 Ok(Primitive::Decimal(a.checked_mul(b)?))
@@ -194,12 +197,13 @@ impl CheckedArithmetic for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a && b)),
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(
-                a.checked_div(b).ok_or(ValueError::ArithmeticOverflow)?,
+                a.checked_div(b)
+                    .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             )),
             (Primitive::Decimal(a), Primitive::Decimal(b)) => {
                 Ok(Primitive::Decimal(a.checked_div(b)?))
@@ -213,12 +217,13 @@ impl CheckedArithmetic for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a && b)),
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(
-                a.checked_rem(b).ok_or(ValueError::ArithmeticOverflow)?,
+                a.checked_rem(b)
+                    .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             )),
             (Primitive::Decimal(a), Primitive::Decimal(b)) => {
                 Ok(Primitive::Decimal(a.checked_rem(b)?))
@@ -232,16 +237,24 @@ impl CheckedArithmetic for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a && b)),
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(
-                a.checked_pow(b.try_into().ok().ok_or(ValueError::ArithmeticOverflow)?)
-                    .ok_or(ValueError::ArithmeticOverflow)?,
+                a.checked_pow(
+                    b.try_into()
+                        .ok()
+                        .ok_or_else(|| ValueError::ArithmeticOverflow)?,
+                )
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             )),
             (Primitive::Decimal(a), Primitive::Decimal(b)) => Ok(Primitive::Decimal(
-                a.checked_pow(b.try_into().ok().ok_or(ValueError::ArithmeticOverflow)?)?,
+                a.checked_pow(
+                    b.try_into()
+                        .ok()
+                        .ok_or_else(|| ValueError::ArithmeticOverflow)?,
+                )?,
             )),
 
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -263,7 +276,7 @@ impl CheckedBitwise for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a && b)),
@@ -276,7 +289,7 @@ impl CheckedBitwise for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a || b)),
@@ -289,7 +302,7 @@ impl CheckedBitwise for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Boolean(a), Primitive::Boolean(b)) => Ok(Primitive::Boolean(a ^ b)),
@@ -302,7 +315,7 @@ impl CheckedBitwise for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(a << b)),
@@ -314,7 +327,7 @@ impl CheckedBitwise for Primitive {
         let (ta, tb) = (self.type_of(), other.type_of());
         let (a, b) = self
             .resolve(other)
-            .ok_or(ValueError::TypeConversion(ta, tb))?;
+            .ok_or_else(|| ValueError::TypeConversion(ta, tb))?;
         let t = a.type_of();
         match (a, b) {
             (Primitive::Integer(a), Primitive::Integer(b)) => Ok(Primitive::Integer(a >> b)),
@@ -479,7 +492,7 @@ impl SerializeToBytes for Primitive {
 
             _ => Err(crate::traits::ByteDecodeError::MalformedData(
                 "Primitive".to_string(),
-                "Invalid value type".to_string(),
+                format!("Invalid value type {:02X}", ty),
             )),
         }
     }

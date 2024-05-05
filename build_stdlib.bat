@@ -14,11 +14,4 @@ if "%1"=="--debug" (
     SET "DEBUG_FLAG=-D"
 )
 
-REM Define source file paths
-SET "SOURCE_PATHS=math system string"
-
-for %%p in (%SOURCE_PATHS%) do (
-    echo Compiling %%p...
-    cargo run --bin compiler -- -F -f stdlib/src/%%p.lav -o stdlib/%%p.bin --allow-syscalld %DEBUG_FLAG%
-    echo.
-)
+cargo run --bin compiler -- -F -f stdlib/src/stdlib.lav -o stdlib/stdlib.lbc --allow-syscalld %DEBUG_FLAG%

@@ -88,7 +88,7 @@ pub fn string(slice: &str) -> Result<String, LiteralError> {
                             .map_err(|_| LiteralError::InvalidEscapeSequence('\\'))?;
                         output.push(
                             std::char::from_u32(code)
-                                .ok_or(LiteralError::InvalidEscapeSequence('\\'))?,
+                                .ok_or_else(|| LiteralError::InvalidEscapeSequence('\\'))?,
                         );
                     }
                     _ => return Err(LiteralError::InvalidEscapeSequence(c)),

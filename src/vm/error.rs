@@ -35,9 +35,23 @@ pub enum RuntimeErrorType {
     )]
     Decode(OpCode, crate::traits::ByteDecodeError),
 
+    /// Error occurred due to bad type in bytecode
+    /// Probably stack corruption
+    #[error("An issue occurred with the Lavendeux VM - this is a bug\n= {0:?} attempted to read a value of the wrong type:\n= Expected {1}")]
+    BadType(OpCode, ValueType),
+
+    /// A reference points to another reference
+    /// This is a bug in the compiler
+    #[error("An issue occurred with the Lavendeux VM - this is a bug\n= Possible circular reference detected")]
+    NestedReference,
+
     //
     // This category of errors deals with issues in the user's code
     //
+
+    /// Attempted to allocate too much memory
+    #[error("{0}")]
+    MemoryAllocation(#[from] std::collections::TryReserveError),
     
     //
     // Errors during reference resolution
@@ -61,6 +75,10 @@ pub enum RuntimeErrorType {
     /// Attempted to delete a constant value
     #[error("Cannot delete a constant value\n= To delete a value use an identifier, like `a`, `name_2`, or `my_variable`")]
     DeleteLiteral,
+
+    /// Attempted to write to a constant value
+    #[error("Cannot write to a constant value\n= To write to a value use an identifier, like `a`, `name_2`, or `my_variable`")]
+    SetLiteral,
 
     /// Attempted to modify a read-only value
     #[error("Cannot assign a constant\n= To assign a value use an identifier, like `a`, `name_2`, or `my_variable`")]
@@ -90,13 +108,41 @@ pub enum RuntimeErrorType {
     #[error("Collection is empty")]
     IteratorEmpty,
 
+    //
+    // Errors during function calls
+    //
+
+    /// Error during function call
+    #[error("In function")]
+    Function,
+
     /// Attempted to call a non-function
     #[error("No such function exists")]
     UndefinedFunction,
-
+    
     /// Attempted to call a function with the wrong arguments
-    #[error("Arguments incorrect;\n= {0}")]
-    IncorrectFunctionArgs(String),
+    #[error("Number of arguments incorrect;\n= {0}")]
+    IncorrectFunctionArgCount(String),
+    
+    /// Attempted to call a function with the wrong arguments
+    #[error("Argument type incorrect;\n= Argument {index} expected `{expected}`, found `{provided}`\n= {signature}")]
+    IncorrectFunctionArg{
+        /// The signature of the function
+        signature: String,
+
+        /// The expected type
+        expected: ValueType,
+
+        /// The provided type
+        provided: ValueType,
+
+        /// The index of the argument
+        index: usize,
+    },
+
+    /// Call to THRW, or stdlib::throw
+    #[error("{0}")]
+    Custom(String),
 
     /// Error occurred during operation on a value
     #[error("{0}")]
@@ -121,10 +167,13 @@ pub struct RuntimeError {
 impl std::error::Error for RuntimeError {}
 impl std::fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(token) = &self.token {
-            write!(f, "{}\n= ", token)?;
+        if let Some(parent) = &self.parent {
+            write!(f, "{}\n", parent)?;
         }
-        write!(f, "{}", self.error)
+        if let Some(token) = &self.token {
+            write!(f, "{}\n", token)?;
+        }
+        write!(f, "= {}", self.error)
     }
 }
 

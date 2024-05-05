@@ -23,20 +23,21 @@ pub trait IOExt {
         T: SerializeToBytes;
 }
 
-impl IOExt for super::ExecutionContext {
+impl IOExt for super::VirtualMachine {
     fn next_byte(&mut self) -> Result<u8, RuntimeError> {
-        self.set_pc(self.pc() + 1);
-        match self.code().get(self.pc() - 1) {
+        let start = self.context().pc();
+        self.context_mut().set_pc(start + 1);
+        match self.context().code().get(self.context().pc() - 1) {
             Some(byte) => Ok(*byte),
             None => Err(self.emit_err(RuntimeErrorType::UnexpectedEnd(self.last_opcode))),
         }
     }
 
     fn next_bytes(&mut self, len: usize) -> Result<&[u8], RuntimeError> {
-        let start = self.pc();
-        self.set_pc(self.pc() + len);
+        let start = self.context().pc();
+        self.context_mut().set_pc(start + len);
 
-        match self.code().get(start..self.pc()) {
+        match self.context().code().get(start..self.context().pc()) {
             Some(bytes) => Ok(bytes),
             None => Err(self.emit_err(RuntimeErrorType::UnexpectedEnd(self.last_opcode))),
         }
@@ -83,15 +84,15 @@ impl IOExt for super::ExecutionContext {
     where
         T: SerializeToBytes,
     {
-        let pc = self.pc();
-        let mut iter = self.code().iter().copied().skip(pc);
+        let pc = self.context().pc();
+        let mut iter = self.context().code().iter().copied().skip(pc);
         let len = iter.len();
         let result = T::deserialize_from_bytes(&mut iter)
             .map_err(|e| self.emit_err(RuntimeErrorType::Decode(self.last_opcode, e)))?;
         let len = len - iter.len();
 
         if len > 0 {
-            self.set_pc(pc + len);
+            self.context_mut().set_pc(pc + len);
         }
 
         Ok(result)

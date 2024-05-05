@@ -1,8 +1,16 @@
 //! Memory manager for storing variables and their values
 //! Also provides scoping, referencing and functions
 
-use super::load_stdlib;
+use core::panic;
+
+use super::{load_stdlib, value_source::ValueSource};
 use crate::value::{Function, Value};
+
+mod slot;
+pub use slot::Slot;
+
+mod slot_ref;
+pub use slot_ref::SlotRef;
 
 /// A memory manager for storing variables and their values
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,15 +54,17 @@ impl MemoryManager {
 
     /// Reset the memory manager, clearing all variables but keeping the global scope
     pub fn reset(&mut self) {
+        for frame in self.frame_ptr.iter() {
+            self.stack.truncate(*frame);
+        }
+
         self.locks.clear();
         self.frame_ptr.clear();
-        self.stack.clear();
     }
 
     /// Lock the stack at the current depth, hiding values from higher scopes
     pub fn scope_lock(&mut self) {
-        self.locks
-            .push(self.stack.len().checked_sub(1).unwrap_or(0));
+        self.locks.push(self.stack.len());
     }
 
     /// Create a new stack frame starting at the current depth
@@ -62,17 +72,88 @@ impl MemoryManager {
         self.frame_ptr.push(self.stack.len());
     }
 
+    /// Scope out until we remove the next lock, or the global scope
+    pub fn scope_out_to_lock(&mut self) {
+        let n_locks = self.locks.len();
+        if n_locks > 0 {
+            while self.locks.len() == n_locks {
+                self.scope_out();
+            }
+        }
+    }
+
     /// End the current stack frame, removing all values added since the frame was created
     /// If the frame was locked, the lock will be removed
     pub fn scope_out(&mut self) {
-        match self.frame_ptr.pop() {
-            Some(ptr) => self.stack.truncate(ptr),
+        let frame_ptr = match self.frame_ptr.pop() {
+            Some(ptr) => ptr,
             None => panic!("Attempted to scope out of global scope"),
+        };
+
+        // Pop the top-most blank stack entry in the dying frame
+        // And remove the top-most frame
+        let mut return_value = None;
+        while self.stack.len() > frame_ptr {
+            let next = self.stack.pop().unwrap(); // Safe to unwrap, as we know the stack is not empty
+                                                  // Since len() > frame_ptr, even at 0 the stack has 1 element here
+
+            if next.version() == 0 && return_value.is_none() {
+                return_value = Some(next);
+            }
         }
 
-        while self.stack.len() < self.last_valid_scope() {
+        // Remove a lock if the stack is now shorter than the lock
+        if self.stack.len() <= self.last_valid_scope() {
             self.locks.pop();
         }
+
+        // Pop the return value back onto the stack
+        if let Some(value) = return_value {
+            self.stack.push(value);
+        }
+    }
+
+    /// Collects all working stack entries from the stack
+    /// These are entries with a version of 0, and will be removed from the stack
+    pub fn all_stack_blanks(&mut self) -> Vec<ValueSource> {
+        let mut out = vec![];
+        for i in 0..self.stack.len() {
+            if self.stack[i].version() == 0 {
+                let slot = self.stack.remove(i);
+                if let Slot::Occupied { value, .. } = slot {
+                    out.push(value);
+                }
+            }
+        }
+        out
+    }
+
+    /// Peek at the top-most blank stack entry
+    pub fn peek_blank(&self) -> Option<&ValueSource> {
+        for i in (0..self.stack.len()).rev() {
+            if self.stack[i].version() == 0 {
+                return self.stack[i].as_value();
+            }
+        }
+
+        None
+    }
+
+    /// Pop the top-most blank stack entry
+    pub fn pop_blank(&mut self) -> Option<ValueSource> {
+        for i in (0..self.stack.len()).rev() {
+            if self.stack[i].version() == 0 {
+                let value = self.stack.remove(i).take();
+                return value;
+            }
+        }
+
+        None
+    }
+
+    /// Push a blank stack entry
+    pub fn push_blank(&mut self, value: ValueSource) {
+        self.stack.push(Slot::new_blank(value));
     }
 
     /// Get a reference to all the functions in the memory manager
@@ -82,7 +163,7 @@ impl MemoryManager {
             .iter()
             .filter_map(|slot| match slot {
                 Slot::Occupied {
-                    value: Value::Function(func),
+                    value: ValueSource::Literal(Value::Function(func)),
                     ..
                 } => Some(func),
                 _ => None,
@@ -96,7 +177,7 @@ impl MemoryManager {
     }
 
     /// Write a value to the global scope
-    pub fn write_global(&mut self, name_hash: u64, value: Value, readonly: bool) {
+    pub fn write_global(&mut self, name_hash: u64, value: ValueSource, write_locked: bool) {
         for slot in self.globals.iter_mut().rev() {
             if slot.check_name(name_hash) {
                 slot.put(value);
@@ -104,17 +185,13 @@ impl MemoryManager {
             }
         }
 
-        self.globals.push(Slot::Occupied {
-            write_locked: readonly,
-            name_hash,
-            version: 0,
-            value,
-        });
+        self.globals
+            .push(Slot::new_occupied(name_hash, value, write_locked));
     }
 
     /// Write a value to the stack
     /// Returns a reference to the value
-    pub fn write(&mut self, name_hash: u64, value: Value) -> SlotRef {
+    pub fn write(&mut self, name_hash: u64, value: ValueSource) -> SlotRef {
         let ref_offset = self.last_valid_scope();
         for (i, slot) in self.valid_stack_slice_mut().iter_mut().rev().enumerate() {
             if slot.check_name(name_hash) {
@@ -127,22 +204,18 @@ impl MemoryManager {
             }
         }
 
-        self.stack.push(Slot::Occupied {
-            write_locked: false,
-            name_hash,
-            version: 0,
-            value,
-        });
-
+        let slot = Slot::new_occupied(name_hash, value, false);
+        let version = slot.version();
+        self.stack.push(slot);
         SlotRef::Stack {
             i: self.stack.len() - 1,
             name_hash,
-            version: 0,
+            version,
         }
     }
 
     /// Get a reference to a value in the memory manager
-    pub fn read(&self, name_hash: u64) -> Option<&Value> {
+    pub fn read(&self, name_hash: u64) -> Option<&ValueSource> {
         // Check main stack
         for slot in self.valid_stack_slice().iter().rev() {
             if !slot.check_name(name_hash) {
@@ -165,7 +238,7 @@ impl MemoryManager {
     }
 
     /// Get a mutable reference to a value in the memory manager
-    pub fn read_mut(&mut self, name_hash: u64) -> Option<&mut Value> {
+    pub fn read_mut(&mut self, name_hash: u64) -> Option<&mut ValueSource> {
         let _self: *mut Self = self;
 
         // Check main stack
@@ -194,7 +267,7 @@ impl MemoryManager {
     }
 
     /// Delete a value from the memory manager, returning the value
-    pub fn delete(&mut self, name_hash: u64) -> Option<Value> {
+    pub fn delete(&mut self, name_hash: u64) -> Option<ValueSource> {
         // Check main stack
         for slot in self.valid_stack_slice_mut().iter_mut() {
             if !slot.check_name(name_hash) {
@@ -217,7 +290,7 @@ impl MemoryManager {
     }
 
     /// Get a reference to a value in the memory manager
-    pub fn get_ref(&mut self, name_hash: u64) -> Option<SlotRef> {
+    pub fn get_ref(&self, name_hash: u64) -> Option<SlotRef> {
         // Check main stack
         for (i, slot) in self.valid_stack_slice().iter().enumerate().rev() {
             match slot {
@@ -274,263 +347,45 @@ impl MemoryManager {
         }
         0
     }
-}
 
-/// A reference to a value in the memory manager
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SlotRef {
-    /// A reference to a value on the stack
-    Stack {
-        /// The index of the value in the stack
-        i: usize,
-
-        /// The expected name hash of the value
-        name_hash: u64,
-
-        /// The expected version number of the slot
-        version: u32,
-    },
-
-    /// A reference to a value in the global scope
-    Global {
-        /// The index of the value in the stack
-        i: usize,
-
-        /// The expected name hash of the value
-        name_hash: u64,
-
-        /// The expected version number of the slot
-        version: u32,
-    },
-}
-impl SlotRef {
-    fn get_ref<'m>(&self, memory: &'m MemoryManager) -> Option<&'m Slot> {
-        match self {
-            SlotRef::Stack {
-                i,
-                name_hash,
-                version,
-                ..
-            } => match memory.stack.get(*i) {
-                Some(slot) if slot.check_version(*version) && slot.check_name(*name_hash) => {
-                    Some(slot)
-                }
-                _ => None,
-            },
-
-            SlotRef::Global {
-                i,
-                name_hash,
-                version,
-                ..
-            } => match memory.globals.get(*i) {
-                Some(slot) if slot.check_version(*version) && slot.check_name(*name_hash) => {
-                    Some(slot)
-                }
-                _ => None,
-            },
-        }
+    fn is_locked(&self, i: usize) -> bool {
+        self.locks.iter().any(|lock| *lock == i)
     }
 
-    fn get_mutref<'m>(&self, memory: &'m mut MemoryManager) -> Option<&'m mut Slot> {
-        match self {
-            SlotRef::Stack {
-                i,
-                name_hash,
-                version,
-                ..
-            } => match memory.stack.get_mut(*i) {
-                Some(slot) if slot.check_version(*version) && slot.check_name(*name_hash) => {
-                    Some(slot)
-                }
-                _ => None,
-            },
-
-            SlotRef::Global {
-                i,
-                name_hash,
-                version,
-                ..
-            } => match memory.globals.get_mut(*i) {
-                Some(slot) if slot.check_version(*version) && slot.check_name(*name_hash) => {
-                    Some(slot)
-                }
-                _ => None,
-            },
-        }
-    }
-
-    /// Get the name hash of the value this SlotRef points to
-    pub fn name_hash(&self) -> u64 {
-        match self {
-            SlotRef::Stack { name_hash, .. } => *name_hash,
-            SlotRef::Global { name_hash, .. } => *name_hash,
-        }
-    }
-
-    /// Get the version number of the value this SlotRef points to
-    pub fn version(&self) -> u32 {
-        match self {
-            SlotRef::Stack { version, .. } => *version,
-            SlotRef::Global { version, .. } => *version,
-        }
-    }
-
-    /// Get a reference to the value this SlotRef points to
-    pub fn get<'m>(&self, memory: &'m MemoryManager) -> Option<&'m Value> {
-        match self.get_ref(memory) {
-            Some(slot) => slot.as_value(),
-            None => None,
-        }
-    }
-
-    /// Get a mutable reference to the value this SlotRef points to
-    pub fn get_mut<'m>(&self, memory: &'m mut MemoryManager) -> Option<&'m mut Value> {
-        match self.get_mutref(memory) {
-            Some(slot) => slot.as_value_mut(),
-            None => None,
-        }
-    }
-
-    /// Set the value this SlotRef points to
-    pub fn set(&self, memory: &mut MemoryManager, value: Value) {
-        if let Some(slot) = self.get_mutref(memory) {
-            slot.put(value);
-        }
-    }
-
-    /// Delete the value this SlotRef points to, returning the value
-    pub fn delete(&self, memory: &mut MemoryManager) -> Option<Value> {
-        match self.get_mutref(memory) {
-            Some(slot) => slot.take(),
-            None => None,
-        }
+    fn is_frame_boundary(&self, i: usize) -> bool {
+        self.frame_ptr.iter().any(|ptr| *ptr == i)
     }
 }
 
-/// A slot in the memory manager
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Slot {
-    /// An empty slot
-    Vacant {
-        /// The version number of the slot
-        version: u32,
-    },
-
-    /// A slot containing a value
-    Occupied {
-        /// The name hash of the value in the slot
-        name_hash: u64,
-
-        /// Whether the slot is write-locked
-        write_locked: bool,
-
-        /// The version number of the slot
-        version: u32,
-
-        /// The value in the slot
-        value: Value,
-    },
-}
-impl Slot {
-    /// Get the version number of the slot
-    pub fn version(&self) -> u32 {
-        match self {
-            Slot::Occupied { version, .. } => *version,
-            Slot::Vacant { version } => *version,
-        }
-    }
-
-    /// Check the version number of the slot
-    /// If the slot is vacant, the reference being checked is invalid
-    /// so this will return false
-    pub fn check_version(&self, version: u32) -> bool {
-        match self {
-            Slot::Occupied {
-                version: slot_version,
-                ..
-            } => *slot_version == version,
-            Slot::Vacant { .. } => false,
-        }
-    }
-
-    /// Check if the name hash of the slot matches the given name hash
-    /// If the slot is vacant, the reference being checked is invalid
-    /// so this will return false
-    pub fn check_name(&self, name_hash: u64) -> bool {
-        match self {
-            Slot::Occupied {
-                name_hash: slot_hash,
-                ..
-            } => *slot_hash == name_hash,
-            Slot::Vacant { .. } => false,
-        }
-    }
-
-    /// Convert the Slot into a Value, consuming the Slot
-    /// This is a delete operation, and will increment the version number
-    pub fn take(&mut self) -> Option<Value> {
-        match self {
-            Slot::Occupied {
-                version,
-                write_locked,
-                ..
-            } => {
-                if *write_locked {
-                    return None;
-                }
-                let mut s = Slot::Vacant {
-                    version: version.wrapping_add(1),
-                };
-                std::mem::swap(self, &mut s);
-                if let Slot::Occupied { value, .. } = s {
-                    Some(value)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    /// Replace the value in the slot, if the slot is occupied
-    pub fn put(&mut self, value: Value) {
-        match self {
-            Slot::Occupied {
-                value: slot_value,
-                write_locked,
-                ..
-            } => {
-                if !*write_locked {
-                    *slot_value = value;
-                }
+impl std::fmt::Display for MemoryManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "[Globals]")?;
+        for (i, slot) in self.globals.iter().enumerate() {
+            if slot.write_locked() {
+                continue;
             }
 
-            _ => {}
+            writeln!(f, "{i:08X}   {slot}")?;
         }
-    }
 
-    /// Get a reference to the value in the slot
-    pub fn as_value(&self) -> Option<&Value> {
-        match self {
-            Slot::Occupied { value, .. } => Some(value),
-            _ => None,
+        writeln!(f, "\n[Stack]")?;
+        for (i, slot) in self.stack.iter().enumerate() {
+            if self.is_frame_boundary(i) {
+                writeln!(f, "{i:08X} --- FRAME BOUNDARY ---")?;
+                if self.is_locked(i) {
+                    writeln!(f, "{i:08X} --- SCOPE LOCKED ---")?;
+                }
+            }
+            writeln!(f, "{i:08X}   {slot}")?;
         }
-    }
 
-    /// Get a mutable reference to the value in the slot
-    pub fn as_value_mut(&mut self) -> Option<&mut Value> {
-        match self {
-            Slot::Occupied { value, .. } => Some(value),
-            _ => None,
+        if self.is_frame_boundary(self.stack.len()) {
+            writeln!(f, "{:08X} --- FRAME BOUNDARY ---", self.stack.len())?;
+            if self.is_locked(self.stack.len()) {
+                writeln!(f, "{:08X} --- SCOPE LOCKED ---", self.stack.len())?;
+            }
         }
-    }
 
-    /// Lock the slot, preventing writes
-    pub fn lock(&mut self) {
-        match self {
-            Slot::Occupied { write_locked, .. } => *write_locked = true,
-            _ => {}
-        }
+        Ok(())
     }
 }

@@ -1,70 +1,63 @@
 use std::collections::HashMap;
 
 use crate::{
+    traits::SafeVecAlloc,
     value::{Value, ValueType},
     vm::error::{RuntimeError, RuntimeErrorType},
 };
 
-use super::{IOExt, RefExt, StackExt};
+use super::{IOExt, StackExt};
 
 pub trait CollectionExt {
-    fn make_array(&mut self) -> Result<(), RuntimeError>;
-    fn make_object(&mut self) -> Result<(), RuntimeError>;
-    fn make_range(&mut self) -> Result<(), RuntimeError>;
+    fn op_make_array(&mut self) -> Result<(), RuntimeError>;
+    fn op_make_object(&mut self) -> Result<(), RuntimeError>;
+    fn op_make_range(&mut self) -> Result<(), RuntimeError>;
 
-    fn push_array(&mut self) -> Result<(), RuntimeError>;
-    fn push_object(&mut self) -> Result<(), RuntimeError>;
+    fn op_push_array(&mut self) -> Result<(), RuntimeError>;
+    fn op_push_object(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl CollectionExt for super::ExecutionContext {
+impl CollectionExt for super::VirtualMachine {
     #[inline(always)]
-    fn make_array(&mut self) -> Result<(), RuntimeError> {
+    fn op_make_array(&mut self) -> Result<(), RuntimeError> {
         let n = self.read_u64()? as usize;
-        let mut values = Vec::with_capacity(n);
+        let mut values =
+            Vec::safe_alloc(n).map_err(|e| self.emit_err(RuntimeErrorType::MemoryAllocation(e)))?;
         for _ in 0..n {
-            let value = self.pop()?;
-            let value = self.resolve_reference(value)?;
+            let value = self.pop_value()?;
             values.push(value);
         }
-        self.push(Value::Array(values));
+        self.push_value(Value::Array(values));
         Ok(())
     }
 
     #[inline(always)]
-    fn make_object(&mut self) -> Result<(), RuntimeError> {
+    fn op_make_object(&mut self) -> Result<(), RuntimeError> {
         let n = self.read_u64()? as usize;
-        let mut values = HashMap::with_capacity(n);
+        let mut values = HashMap::safe_alloc(n)
+            .map_err(|e| self.emit_err(RuntimeErrorType::MemoryAllocation(e)))?;
         for _ in 0..n {
-            let key = self.pop()?;
-            let key = self.resolve_reference(key)?;
+            let key = self.pop_value()?;
             let key = key
                 .cast_primitive()
                 .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
 
-            let value = self.pop()?;
-            let value = self.resolve_reference(value)?;
+            let value = self.pop_value()?;
             values.insert(key, value);
         }
-        self.push(Value::Object(values));
+        self.push_value(Value::Object(values));
         Ok(())
     }
 
     #[inline(always)]
-    fn make_range(&mut self) -> Result<(), RuntimeError> {
-        let end = self.pop()?;
-        let start = self.pop()?;
-
-        let start = self.resolve_reference(start)?;
-        let end = self.resolve_reference(end)?;
-
+    fn op_make_range(&mut self) -> Result<(), RuntimeError> {
+        let end = self.pop_value()?;
+        let start = self.pop_value()?;
         let (start, end) = start
             .resolve(end)
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
 
-        let types = start
-            .type_of(None)
-            .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
-
+        let types = start.type_of();
         match types {
             ValueType::Integer => {
                 let start = start
@@ -74,9 +67,9 @@ impl CollectionExt for super::ExecutionContext {
                     .cast_integer()
                     .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
                 if start > end {
-                    self.push(Value::Range(end..start))
+                    self.push_value(Value::Range(end..start))
                 } else {
-                    self.push(Value::Range(start..end));
+                    self.push_value(Value::Range(start..end));
                 }
             }
             ValueType::String => {
@@ -98,7 +91,7 @@ impl CollectionExt for super::ExecutionContext {
                             .map(|c| Value::string(c.to_string()))
                             .collect()
                     };
-                    self.push(Value::Array(crange));
+                    self.push_value(Value::Array(crange));
                 } else {
                     return Err(self.emit_err(RuntimeErrorType::InvalidStringsForRange));
                 }
@@ -109,41 +102,36 @@ impl CollectionExt for super::ExecutionContext {
     }
 
     #[inline(always)]
-    fn push_array(&mut self) -> Result<(), RuntimeError> {
-        let value = self.pop()?;
-        let value = self.resolve_reference(value)?;
+    fn op_push_array(&mut self) -> Result<(), RuntimeError> {
+        let value = self.pop_value()?;
 
-        let array = self.pop()?;
-        let array = self.resolve_reference(array)?;
+        let array = self.pop_value()?;
 
         let mut array = array
             .cast_array()
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
         array.push(value);
-        self.push(Value::Array(array));
+        self.push_value(Value::Array(array));
 
         Ok(())
     }
 
     #[inline(always)]
-    fn push_object(&mut self) -> Result<(), RuntimeError> {
-        let value = self.pop()?;
-        let value = self.resolve_reference(value)?;
+    fn op_push_object(&mut self) -> Result<(), RuntimeError> {
+        let value = self.pop_value()?;
 
-        let key = self.pop()?;
-        let key = self.resolve_reference(key)?;
+        let key = self.pop_value()?;
         let key = key
             .cast_primitive()
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
 
-        let object = self.pop()?;
-        let object = self.resolve_reference(object)?;
+        let object = self.pop_value()?;
 
         let mut object = object
             .cast_object()
             .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
         object.insert(key, value);
-        self.push(Value::Object(object));
+        self.push_value(Value::Object(object));
 
         Ok(())
     }

@@ -322,6 +322,10 @@ pub enum Rule {
     #[regex("ends_with|endswith")]
     EndsWith,
 
+    #[strum(to_string = "ref")]
+    #[token("ref")]
+    Reference,
+
     //
     // Value Literals
     //

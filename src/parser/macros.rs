@@ -60,7 +60,7 @@ macro_rules! build_nt {
         match $tokens.len() == 0 {
             true => None,
             _ => {
-                #[cfg(feature = "debug_compiler_internal")]
+                #[cfg(feature = "debug_compiler_internal_parser")]
                 {
                     println!(
                         "{}Parsing {}: next={:?}",
@@ -80,7 +80,7 @@ macro_rules! build_nt {
                         None => None,
                     }
                 }
-                #[cfg(not(feature = "debug_compiler_internal"))]
+                #[cfg(not(feature = "debug_compiler_internal_parser"))]
                 $type::parse($tokens)
             }
         }

@@ -5,7 +5,13 @@ edition = "2021"
 
 [features]
 default = []
-debug_compiler_internal = []
+
+# Debug output for the compiler
+# Only turn these on if you like massive amount of garbage in your console output
+debug_compiler_internal = ["debug_compiler_internal_parser", "debug_compiler_internal_vm"]
+debug_compiler_internal_parser = []
+debug_compiler_internal_vm = []
+
 
 [profile.release]
 debug = true

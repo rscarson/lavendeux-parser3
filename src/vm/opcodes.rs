@@ -69,6 +69,12 @@ pub enum OpCode {
     /// `REF <Name Hash>`
     REF,
 
+    /// Check that the value at the top of the stack
+    /// Has a valid value available
+    /// Peek the value at the top of the stack
+    /// `VREF`
+    VREF,
+
     /// Consumes a reference and pushes the value it points to onto the stack
     /// Consumes 1 stack value [Reference]
     /// Pushes 1 value onto the stack [Value]
@@ -106,6 +112,12 @@ pub enum OpCode {
     ////////////////////////
     // Value manipulation //
     ////////////////////////
+    
+    /// Get the type of the top value on the stack
+    /// Consumes 1 stack [value]
+    /// Pushes 1 value onto the stack [Type name]
+    /// `TYPE`
+    TYPE,
     
     /// Convert the top value on the stack to a type
     /// Consumes 1 stack value; [Input Value]
@@ -387,14 +399,34 @@ pub enum OpCode {
     /// `RET`
     RET,
 
-    //////////////
-    // Misc ops //
-    //////////////
+    ///////////////
+    // Debug ops //
+    ///////////////
     
+    /// Print the state of the memory manager
+    /// `PRNTM`
+    PRNTM,
+
     /// Print the top value on the stack
     /// Consumes 1 stack value
     /// `PRNT`
     PRNT,
+
+    /// Throw an error and halt execution
+    /// Consumes 1 stack value; [Error msg]
+    /// `THRW`
+    THRW,
+
+    //////////////
+    // Misc ops //
+    //////////////
+    
+    /// Sort a value
+    /// Can sort any type
+    /// Consumes 1 stack value; [Value]
+    /// Pushes 1 value onto the stack; [Sorted]
+    /// `SORT`
+    SORT,
 
     /// Read a file from the filesystem
     /// Consumes 1 stack value; [Path] 

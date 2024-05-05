@@ -4,7 +4,7 @@ use super::*;
 use crate::{
     lexer::Rule,
     parser::{ParserError, ParserNode},
-    traits::IntoOwned,
+    traits::{IntoOwned, SerializeToBytes},
     vm::OpCode,
 };
 
@@ -45,23 +45,23 @@ define_node!(IfNode(
         // IF <CONDITION>
         this.condition.compile(compiler)?;
         compiler.push(OpCode::JMPF);
-        let jmp1 = compiler.push_u64(0); // Placeholder for a forward jump
+        let if_false = compiler.push_u64(0); // Placeholder for a forward jump
 
         // THEN <BLOCK>
         this.then_block.compile(compiler)?;
         compiler.push(OpCode::JMP);
-        let jmp2 = compiler.push_u64(0); // Placeholder for a forward jump
+        let after_truth = compiler.push_u64(0); // Placeholder for a forward jump
 
         // Fill in the first else-jump
         let jmp1_value = compiler.len() as u64;
-        compiler.replace(jmp1, jmp1_value.to_be_bytes().to_vec());
+        compiler.replace(if_false, jmp1_value.serialize_into_bytes());
 
         // ELSE <BLOCK>
         this.else_block.compile(compiler)?;
 
         // Fill in the second jump
         let jmp2_value = compiler.len() as u64;
-        compiler.replace(jmp2, jmp2_value.to_be_bytes().to_vec());
+        compiler.replace(after_truth, jmp2_value.serialize_into_bytes());
 
         Ok(())
     }
@@ -220,18 +220,18 @@ define_node!(SwitchNode(
 
             // Jump if false to next
             compiler.push(OpCode::JMPF);
-            let skip_jmp = compiler.push_i32(0);
+            let skip_jmp = compiler.push_u64(0);
 
             // The block
             block.compile(compiler)?;
 
             // Jump to end
             compiler.push(OpCode::JMP);
-            end_jmps.push(compiler.push_i32(0));
+            end_jmps.push(compiler.push_u64(0));
 
             // Fill in the skip jump
-            let skip_jmp_value = (compiler.len() - skip_jmp.end) as i32;
-            compiler.replace(skip_jmp, skip_jmp_value.to_be_bytes().to_vec());
+            let skip_jmp_value = compiler.len() as u64;
+            compiler.replace(skip_jmp, skip_jmp_value.serialize_into_bytes());
         }
 
         // Pop the extra value off the stack
@@ -241,9 +241,9 @@ define_node!(SwitchNode(
         this.default.compile(compiler)?;
 
         // Fill in the end jumps
+        let jmp_value = compiler.len() as u64;
         for jmp in end_jmps {
-            let jmp_value = (compiler.len() - jmp.end) as i32;
-            compiler.replace(jmp, jmp_value.to_be_bytes().to_vec());
+            compiler.replace(jmp, jmp_value.serialize_into_bytes());
         }
 
         Ok(())

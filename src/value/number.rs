@@ -79,7 +79,7 @@ impl Number {
             value
                 .try_into()
                 .ok()
-                .ok_or(ValueError::ArithmeticOverflow)?,
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             None,
             None,
         ))
@@ -90,7 +90,7 @@ impl Number {
         Ok(Self::new(
             self.value
                 .checked_round(precision)
-                .ok_or(ValueError::ArithmeticOverflow)?,
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             self.symbol,
             self.precision,
         ))
@@ -156,7 +156,8 @@ impl CheckedArithmetic for Number {
         let (v2, symbol, precision) = other_.decompose();
 
         Ok(Self::new(
-            v1.checked_add(&v2).ok_or(ValueError::ArithmeticOverflow)?,
+            v1.checked_add(&v2)
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             symbol,
             precision,
         ))
@@ -168,7 +169,8 @@ impl CheckedArithmetic for Number {
         let (v2, symbol, precision) = other_.decompose();
 
         Ok(Self::new(
-            v1.checked_sub(&v2).ok_or(ValueError::ArithmeticOverflow)?,
+            v1.checked_sub(&v2)
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             symbol,
             precision,
         ))
@@ -180,7 +182,8 @@ impl CheckedArithmetic for Number {
         let (v2, symbol, precision) = other_.decompose();
 
         Ok(Self::new(
-            v1.checked_mul(&v2).ok_or(ValueError::ArithmeticOverflow)?,
+            v1.checked_mul(&v2)
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             symbol,
             precision,
         ))
@@ -192,7 +195,8 @@ impl CheckedArithmetic for Number {
         let (v2, symbol, precision) = other_.decompose();
 
         Ok(Self::new(
-            v1.checked_div(&v2).ok_or(ValueError::ArithmeticOverflow)?,
+            v1.checked_div(&v2)
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             symbol,
             precision,
         ))
@@ -204,7 +208,8 @@ impl CheckedArithmetic for Number {
         let (v2, symbol, precision) = other_.decompose();
 
         Ok(Self::new(
-            v1.checked_rem(&v2).ok_or(ValueError::ArithmeticOverflow)?,
+            v1.checked_rem(&v2)
+                .ok_or_else(|| ValueError::ArithmeticOverflow)?,
             symbol,
             precision,
         ))
@@ -215,20 +220,28 @@ impl CheckedArithmetic for Number {
         let (v1, _, _) = self_.decompose();
         let (v2, symbol, precision) = other_.decompose();
 
-        let v1: f64 = v1.try_into().ok().ok_or(ValueError::ArithmeticOverflow)?;
-        let v2: f64 = v2.try_into().ok().ok_or(ValueError::ArithmeticOverflow)?;
+        let v1: f64 = v1
+            .try_into()
+            .ok()
+            .ok_or_else(|| ValueError::ArithmeticOverflow)?;
+        let v2: f64 = v2
+            .try_into()
+            .ok()
+            .ok_or_else(|| ValueError::ArithmeticOverflow)?;
         let v = v1
             .powf(v2)
             .try_into()
             .ok()
-            .ok_or(ValueError::ArithmeticOverflow)?;
+            .ok_or_else(|| ValueError::ArithmeticOverflow)?;
         Ok(Self::new(v, symbol, precision))
     }
 
     fn checked_neg(self) -> Result<Self, ValueError> {
         let (v, symbol, precision) = self.decompose();
         let m: Decimal = (-1).into();
-        let v = v.checked_mul(m).ok_or(ValueError::ArithmeticOverflow)?;
+        let v = v
+            .checked_mul(m)
+            .ok_or_else(|| ValueError::ArithmeticOverflow)?;
         Ok(Self::new(v, symbol, precision))
     }
 }

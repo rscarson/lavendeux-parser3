@@ -68,7 +68,7 @@ pub fn __include<'source>(
 
     // Parse the file
     let ast = ScriptNode::parse(&mut stack)
-        .ok_or(stack.emit_err())
+        .ok_or_else(|| stack.emit_err())
         .map_err(|e| {
             CompilerError::IncludeError(token.clone(), Box::new(crate::Error::Parser(e)))
         })?;

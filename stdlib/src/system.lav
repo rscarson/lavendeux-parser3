@@ -5,12 +5,26 @@
  */
 
 //# category: System
+//# Get the type of a value
+//# This will return the type of the value as a string
+//# ```lav
+//# type(1) == "int"
+type_of(value): string = __syscalld(TYPE, value)
+
+//# category: System
+//# Exit the program with a message
+//# This will print the message to the console and then exit the program
+//# ```lav
+//# throw("Goodbye, World!")
+throw(msg: string) = __syscalld(THRW, msg)
+
+//# category: System
 //# Print a string to the console.
 //# This will also return the string
 //# ```lav
 //# echo("Hello, World!")
 //# 'test'.echo()
-echo(s: string): string = __syscalld(PRNT, s)
+echo(s: any): string = __syscalld(PRNT, s as string)
 
 // Function stub for the builtin disassemble function
 //# category: System
@@ -66,28 +80,25 @@ __draw_cool_box(title, lines) = {
 //# help("echo")
 //# help("system")
 help(filter: string = ""): string = {
-    functions = __syscalld(LSTFN)
-    echo("tst")
+    functions = for f in __syscalld(LSTFN) do (f as object)
 
     // Now we reorganize the functions into a dictionary by category
     // We also filter out any functions that start with '__'
     categories = {}
     for f in functions {
-        f = f as object
-
         if !(categories contains f['category']) {
             categories[f['category']] = []
         } else nil
-        categories[f['category']] = f
-    } where !((f as object)['name'] starts_with '__')
+
+        categories[f['category']] += f
+    } where !(f['name'] starts_with '__')
 
     // If we're not filtering, we just list all the functions
-    echo (filter)
     if filter == "" {
         out = ""
         for category in categories {
             lines = []
-            for f in categories[category] {
+            for function in categories[category] {
                 line = f['signature']
                 if f contains 'short' then line += ' ' + f['short'] else nil
                 lines += line
@@ -125,3 +136,10 @@ help(filter: string = ""): string = {
         return out
     }
 }
+
+//# category: System
+//# Dump the current memory state
+//# This will return a string with the current memory state
+//# ```lav
+//# dump_memory()
+__dump_memory():string = __syscalld(PRNTM)

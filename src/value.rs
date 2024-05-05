@@ -1,7 +1,7 @@
 //! # Value
 //! The value type used by the language
 //! Contains the main value type and all subtypes
-use crate::{traits::SerializeToBytes, vm::memory_manager::MemoryManager};
+use crate::traits::SerializeToBytes;
 use std::collections::HashMap;
 
 mod error;
@@ -13,9 +13,6 @@ pub use function::*;
 mod number;
 pub use number::{Number, NumberSymbol};
 
-mod reference;
-pub use reference::*;
-
 mod primitive;
 pub use primitive::Primitive;
 
@@ -25,15 +22,15 @@ pub use traits::*;
 mod types;
 pub use types::ValueType;
 
+mod indexing;
+pub use indexing::*;
+
 /// Represents a value in Lavendeux
 /// This is the main data structure used by the language
 #[derive(Clone, PartialEq, Eq)]
 pub enum Value {
     /// Represents a single primitive value
     Primitive(Primitive),
-
-    /// Represents a function, which can be called
-    Function(Function),
 
     /// Represents an array of values of any types
     Array(Vec<Value>),
@@ -45,266 +42,73 @@ pub enum Value {
     /// Represents a range of integers
     Range(std::ops::Range<i128>),
 
-    /// Represents a reference to a value in the memory manager
-    Reference(Reference),
+    /// Represents a function, which can be called
+    Function(Function),
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.partial_cmp(other) {
+            Some(o) => o,
+            None => {
+                // Fall back to type ordering
+                // Primitive < Array < Object < Range < Function
+                match (self, other) {
+                    (Value::Primitive(_), _) => std::cmp::Ordering::Less,
+                    (_, Value::Primitive(_)) => std::cmp::Ordering::Greater,
+
+                    (Value::Array(_), _) => std::cmp::Ordering::Less,
+                    (_, Value::Array(_)) => std::cmp::Ordering::Greater,
+
+                    (Value::Object(_), _) => std::cmp::Ordering::Less,
+                    (_, Value::Object(_)) => std::cmp::Ordering::Greater,
+
+                    (Value::Range(_), _) => std::cmp::Ordering::Less,
+                    (_, Value::Range(_)) => std::cmp::Ordering::Greater,
+
+                    (Value::Function(_), _) => std::cmp::Ordering::Greater,
+                }
+            }
+        }
+    }
 }
 
 impl Value {
-    /// Return a reference to the value at the specified index
-    pub fn get_index(&self, index: Value) -> Result<&Value, ValueError> {
-        let own_type = self.type_of(None)?;
-        let idx_type = index.type_of(None)?;
-        match self {
-            Value::Array(a) => match index {
-                Value::Range(_) => Err(ValueError::ReadOnlyIndexing),
-                Value::Primitive(Primitive::Integer(mut index)) => {
-                    if index < 0 {
-                        index = a.len() as i128 + index;
-                    }
-
-                    a.get(index as usize).ok_or(ValueError::IndexOutOfBounds)
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Object(o) => match index {
-                Value::Primitive(index) => o.get(&index).ok_or(ValueError::KeyNotFound),
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Range(_) => Err(ValueError::ReadOnlyIndexing),
-            Value::Primitive(Primitive::String(_)) => Err(ValueError::ReadOnlyIndexing),
-
-            _ => Err(ValueError::CannotIndexInto(own_type)),
-        }
-    }
-
-    /// Return a mutable reference to the value at the specified index
-    pub fn mut_index(&mut self, index: &Value) -> Result<&mut Value, ValueError> {
-        let own_type = self.type_of(None)?;
-        let idx_type = index.type_of(None)?;
-        match self {
-            Value::Array(a) => match index {
-                Value::Range(_) => Err(ValueError::ReadOnlyIndexing),
-                Value::Primitive(Primitive::Integer(mut index)) => {
-                    if index < 0 {
-                        index = a.len() as i128 + index;
-                    }
-
-                    a.get_mut(index as usize)
-                        .ok_or(ValueError::IndexOutOfBounds)
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Object(o) => match index {
-                Value::Primitive(index) => o.get_mut(&index).ok_or(ValueError::KeyNotFound),
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Range(_) => Err(ValueError::ReadOnlyIndexing),
-            Value::Primitive(Primitive::String(_)) => Err(ValueError::ReadOnlyIndexing),
-
-            _ => Err(ValueError::CannotIndexInto(own_type)),
-        }
-    }
-
-    /// Consume the value, index into it, and return the result
-    pub fn into_index(self, index: Value) -> Result<Value, ValueError> {
-        let own_type = self.type_of(None)?;
-        let idx_type = index.type_of(None)?;
-        match self {
-            Value::Array(a) => match index {
-                Value::Range(index) => {
-                    let start = index.start as usize;
-                    let end = index.end as usize;
-                    if start > end || end > a.len() {
-                        return Err(ValueError::IndexOutOfBounds);
-                    }
-                    Ok(Value::Array(a[start..end].to_vec()))
-                }
-                Value::Primitive(Primitive::Integer(mut index)) => {
-                    if index < 0 {
-                        index = a.len() as i128 + index;
-                    }
-
-                    a.into_iter()
-                        .nth(index as usize)
-                        .ok_or(ValueError::IndexOutOfBounds)
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Object(mut o) => match index {
-                Value::Primitive(index) => o.remove(&index).ok_or(ValueError::KeyNotFound),
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Range(r) => match index {
-                Value::Range(index) => {
-                    let start = index.start;
-                    let end = index.end;
-                    if start >= r.start && end <= r.end {
-                        Ok(Value::Range(start..end))
-                    } else {
-                        Err(ValueError::IndexOutOfBounds)
-                    }
-                }
-                Value::Primitive(Primitive::Integer(index)) => {
-                    if index >= r.start && index < r.end {
-                        Ok(Value::integer(index))
-                    } else {
-                        Err(ValueError::IndexOutOfBounds)
-                    }
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-            Value::Primitive(Primitive::String(s)) => match index {
-                Value::Range(index) => {
-                    let start = index.start as usize;
-                    let end = index.end as usize;
-                    if start > end || end > s.len() {
-                        return Err(ValueError::IndexOutOfBounds);
-                    }
-                    Ok(Value::string(s[start..end].to_string()))
-                }
-                Value::Primitive(Primitive::Integer(mut index)) => {
-                    if index < 0 {
-                        index = s.len() as i128 + index;
-                    }
-                    s.chars()
-                        .nth(index as usize)
-                        .map(|c| Value::string(c.to_string()))
-                        .ok_or(ValueError::IndexOutOfBounds)
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            _ => Err(ValueError::CannotIndexInto(own_type)),
-        }
-    }
-
-    /// Delete an index in a value
-    pub fn delete_index(&mut self, index: Value) -> Result<Value, ValueError> {
-        let own_type = self.type_of(None)?;
-        let idx_type = index.type_of(None)?;
-        match self {
-            Value::Array(a) => match index {
-                Value::Range(_) => Err(ValueError::ReadOnlyIndexing),
-                Value::Primitive(Primitive::Integer(mut index)) => {
-                    if index < 0 {
-                        index = a.len() as i128 + index;
-                    }
-
-                    if index as usize >= a.len() || index < 0 {
-                        return Err(ValueError::IndexOutOfBounds);
-                    }
-
-                    Ok(a.remove(index as usize))
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Object(o) => match index {
-                Value::Primitive(index) => o.remove(&index).ok_or(ValueError::KeyNotFound),
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            Value::Range(_) => Err(ValueError::ReadOnlyIndexing),
-
-            Value::Primitive(Primitive::String(s)) => match index {
-                Value::Range(index) => {
-                    let start = index.start as usize;
-                    let end = index.end as usize;
-                    if start > end || end > s.len() {
-                        return Err(ValueError::IndexOutOfBounds);
-                    }
-                    Ok(Value::string(s[start..end].to_string()))
-                }
-                Value::Primitive(Primitive::Integer(mut index)) => {
-                    if index < 0 {
-                        index = s.len() as i128 + index;
-                    }
-                    let idx = index as usize;
-                    let c = s.chars().nth(idx).ok_or(ValueError::IndexOutOfBounds)?;
-                    s.replace_range(idx..=idx, "");
-                    Ok(Value::string(c.to_string()))
-                }
-                _ => Err(ValueError::CannotIndexUsing(idx_type)),
-            },
-
-            _ => Err(ValueError::CannotIndexInto(own_type)),
-        }
-    }
-
-    /// Alter the index of a value
-    pub fn set_index(&mut self, index: Value, value: Value) -> Result<(), ValueError> {
-        let own_type = self.type_of(None)?;
-        match self {
-            Value::Array(a) => {
-                let mut idx = index.cast_integer()?;
-                if idx < 0 {
-                    idx = a.len() as i128 + idx;
-                }
-                match idx {
-                    idx if idx == a.len() as i128 => a.push(value),
-                    idx if idx > a.len() as i128 => return Err(ValueError::IndexOutOfBounds),
-                    idx => a[idx as usize] = value,
-                }
-            }
-
-            Value::Object(o) => {
-                let idx = index.cast_primitive()?;
-                o.insert(idx, value);
-            }
-
-            Value::Primitive(Primitive::String(s)) => {
-                let mut idx = index.cast_integer()?;
-                if idx < 0 {
-                    idx = s.len() as i128 + idx;
-                }
-                match idx {
-                    idx if idx == s.len() as i128 => s.push_str(&value.cast_string()?),
-                    idx if idx > s.len() as i128 => return Err(ValueError::IndexOutOfBounds),
-                    idx => {
-                        // Replace the char at the specified index with a substring
-                        let idx = idx as usize;
-                        s.replace_range(idx..=idx, &value.cast_string()?);
-                    }
-                }
-            }
-
-            _ => return Err(ValueError::CannotIndexInto(own_type)),
-        }
-
-        Ok(())
-    }
-
     /// Cast a value to a type
     pub fn cast(self, typename: ValueType) -> Result<Self, ValueError> {
-        let own_type = self.type_of(None)?;
-        if self.is_a(typename, None)? {
+        let own_type = self.type_of();
+        if self.is_a(typename) {
             Ok(self)
         } else {
             match typename {
                 ValueType::Boolean => self
                     .as_boolean()
-                    .ok_or(ValueError::TypeConversion(own_type, typename)),
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
                 ValueType::Integer => self
                     .as_integer()
-                    .ok_or(ValueError::TypeConversion(own_type, typename)),
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
                 ValueType::Decimal => self
                     .as_decimal()
-                    .ok_or(ValueError::TypeConversion(own_type, typename)),
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
                 ValueType::String => self
                     .as_string()
-                    .ok_or(ValueError::TypeConversion(own_type, typename)),
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
                 ValueType::Array => self
                     .as_array()
-                    .ok_or(ValueError::TypeConversion(own_type, typename)),
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
                 ValueType::Object => self
                     .as_object()
-                    .ok_or(ValueError::TypeConversion(own_type, typename)),
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
+
+                ValueType::Range => self
+                    .as_range()
+                    .ok_or_else(|| ValueError::TypeConversion(own_type, typename)),
 
                 ValueType::Primitive => self.cast_primitive().map(Value::Primitive),
                 ValueType::Numeric => self
@@ -328,19 +132,15 @@ impl Value {
             Value::Array(a) => a.len() as i128,
             Value::Object(o) => o.len() as i128,
             Value::Range(r) => (r.end - r.start) as i128,
-            Value::Primitive(Primitive::String(s)) => s.len() as i128,
+            Value::Primitive(Primitive::String(s)) => s.chars().count() as i128,
             _ => 1,
         }
     }
 
     /// Checks if the value is of a certain type
-    pub fn is_a(
-        &self,
-        typename: ValueType,
-        mem: Option<&mut MemoryManager>,
-    ) -> Result<bool, ValueError> {
-        let a = self.type_of(mem)?;
-        Ok(match (a, typename) {
+    pub fn is_a(&self, typename: ValueType) -> bool {
+        let a = self.type_of();
+        match (a, typename) {
             (
                 ValueType::Integer | ValueType::Decimal | ValueType::Boolean | ValueType::String,
                 ValueType::Primitive,
@@ -355,35 +155,29 @@ impl Value {
                 true
             }
 
+            (_, ValueType::All) => true,
+
             _ if a == typename => true,
 
             _ => false,
-        })
+        }
     }
 
     /// Returns the type of the value
-    pub fn type_of(&self, mem: Option<&mut MemoryManager>) -> Result<ValueType, ValueError> {
+    pub fn type_of(&self) -> ValueType {
         match self {
-            Value::Primitive(p) => Ok(p.type_of()),
-            Value::Function(_) => Ok(ValueType::Function),
+            Value::Primitive(p) => p.type_of(),
+            Value::Function(_) => ValueType::Function,
 
-            Value::Array(_) => Ok(ValueType::Array),
-            Value::Object(_) => Ok(ValueType::Object),
-            Value::Range(_) => Ok(ValueType::Range),
-
-            Value::Reference(reference) => match mem {
-                Some(mem) => {
-                    let value = reference.value(mem)?;
-                    value.type_of(None)
-                }
-                None => return Err(ValueError::SlotRefInvalid),
-            },
+            Value::Array(_) => ValueType::Array,
+            Value::Object(_) => ValueType::Object,
+            Value::Range(_) => ValueType::Range,
         }
     }
 
     /// Resolves two values into a common type
     pub fn resolve(self, other: Self) -> Result<(Self, Self), ValueError> {
-        let (mut ta, mut tb) = (self.type_of(None)?, other.type_of(None)?);
+        let (mut ta, mut tb) = (self.type_of(), other.type_of());
         if ta == tb {
             Ok((self, other))
         } else {
@@ -404,59 +198,70 @@ impl Value {
                 (ValueType::Primitive, ValueType::Primitive) => {
                     if let (Value::Primitive(p1), Value::Primitive(p2)) = (self, other) {
                         let (t1, t2) = (p1.type_of(), p2.type_of());
-                        let (p1, p2) = p1.resolve(p2).ok_or(ValueError::TypeConversion(t1, t2))?;
+                        let (p1, p2) = p1
+                            .resolve(p2)
+                            .ok_or_else(|| ValueError::TypeConversion(t1, t2))?;
                         Ok((Value::Primitive(p1), Value::Primitive(p2)))
                     } else {
                         unreachable!("Both values are primitives")
                     }
                 }
                 (ValueType::Primitive, ValueType::Array) => Ok((
-                    self.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    self.as_array()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                     other,
                 )),
                 (ValueType::Primitive, ValueType::Object) => Ok((
-                    self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    self.as_object()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                     other,
                 )),
 
                 (ValueType::Array, ValueType::Primitive) => Ok((
                     self,
-                    other.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other
+                        .as_array()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                 )),
                 (ValueType::Object, ValueType::Primitive) => Ok((
                     self,
                     other
                         .as_object()
-                        .ok_or(ValueError::TypeConversion(ta, tb))?,
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                 )),
 
                 (ValueType::Array, ValueType::Object) => Ok((
-                    self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    self.as_object()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                     other,
                 )),
                 (ValueType::Object, ValueType::Array) => Ok((
                     self,
                     other
                         .as_object()
-                        .ok_or(ValueError::TypeConversion(ta, tb))?,
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                 )),
 
                 (ValueType::Array, ValueType::Range) => Ok((
                     self,
-                    other.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    other
+                        .as_array()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                 )),
                 (ValueType::Object, ValueType::Range) => Ok((
                     self,
                     other
                         .as_object()
-                        .ok_or(ValueError::TypeConversion(ta, tb))?,
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                 )),
                 (ValueType::Range, ValueType::Array) => Ok((
-                    self.as_array().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    self.as_array()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                     other,
                 )),
                 (ValueType::Range, ValueType::Object) => Ok((
-                    self.as_object().ok_or(ValueError::TypeConversion(ta, tb))?,
+                    self.as_object()
+                        .ok_or_else(|| ValueError::TypeConversion(ta, tb))?,
                     other,
                 )),
 
@@ -474,7 +279,7 @@ impl Value {
         match self {
             Value::Primitive(p) => Ok(p),
             _ => Err(ValueError::TypeConversion(
-                self.type_of(None)?,
+                self.type_of(),
                 ValueType::Primitive,
             )),
         }
@@ -482,7 +287,7 @@ impl Value {
 
     /// Turns the value into a primitive, if possible
     pub fn cast_decimal(self) -> Result<Number, ValueError> {
-        let own_type = self.type_of(None)?;
+        let own_type = self.type_of();
         match self {
             Value::Primitive(p) => match p.as_decimal() {
                 Some(Primitive::Decimal(n)) => Ok(n),
@@ -510,7 +315,7 @@ impl Value {
 
     /// Returns the truth value of the value
     pub fn cast_boolean(self) -> Result<bool, ValueError> {
-        let own_type = self.type_of(None)?;
+        let own_type = self.type_of();
         match self.as_boolean() {
             Some(Value::Primitive(Primitive::Boolean(i))) => Ok(i),
             _ => Err(ValueError::TypeConversion(own_type, ValueType::Boolean)),
@@ -532,7 +337,7 @@ impl Value {
 
     /// Turns the value into an integer, if possible
     pub fn cast_integer(self) -> Result<i128, ValueError> {
-        let own_type = self.type_of(None)?;
+        let own_type = self.type_of();
         match self.as_integer() {
             Some(Value::Primitive(Primitive::Integer(i))) => Ok(i),
             _ => Err(ValueError::TypeConversion(own_type, ValueType::Integer)),
@@ -564,13 +369,13 @@ impl Value {
             Value::Array(a) => Some(Value::Primitive(Primitive::String(format!("{:?}", a)))),
             Value::Object(o) => Some(Value::Primitive(Primitive::String(format!("{:?}", o)))),
             Value::Range(r) => Some(Value::Primitive(Primitive::String(format!("{:?}", r)))),
-            _ => None,
+            Value::Function(f) => Some(Value::Primitive(Primitive::String(f.docs.signature))),
         }
     }
 
     /// Turns the value into a string, if possible
     pub fn cast_string(self) -> Result<String, ValueError> {
-        let own_type = self.type_of(None)?;
+        let own_type = self.type_of();
         match self.as_string() {
             Some(Value::Primitive(Primitive::String(s))) => Ok(s),
             _ => Err(ValueError::TypeConversion(own_type, ValueType::String)),
@@ -579,7 +384,7 @@ impl Value {
 
     /// Turns the value into an array, if possible
     pub fn as_array(self) -> Option<Self> {
-        match self.type_of(None).ok()? {
+        match self.type_of() {
             ValueType::Integer
             | ValueType::Decimal
             | ValueType::String
@@ -602,7 +407,7 @@ impl Value {
 
     /// Turns the value into an array, if possible
     pub fn cast_array(self) -> Result<Vec<Value>, ValueError> {
-        let own_type = self.type_of(None)?;
+        let own_type = self.type_of();
         match self.as_array() {
             Some(Value::Array(a)) => Ok(a),
             _ => Err(ValueError::TypeConversion(own_type, ValueType::Array)),
@@ -635,17 +440,42 @@ impl Value {
             )),
 
             Value::Function(f) => Some(Value::Object(f.docs.into_hashmap())),
-
-            _ => None,
         }
     }
 
     /// Returns an object representation of the value, if possible
     pub fn cast_object(self) -> Result<HashMap<Primitive, Value>, ValueError> {
-        let own_type = self.type_of(None)?;
+        let own_type = self.type_of();
         match self.as_object() {
             Some(Value::Object(o)) => Ok(o),
             _ => Err(ValueError::TypeConversion(own_type, ValueType::Object)),
+        }
+    }
+
+    pub fn as_range(self) -> Option<Self> {
+        match self {
+            Value::Range(_) => Some(self),
+            Value::Primitive(p) => p.into_integer().map(|i| Value::Range(i..i + 1)),
+            _ => None,
+        }
+    }
+
+    pub fn into_range(self) -> Result<std::ops::Range<i128>, ValueError> {
+        let own_type = self.type_of();
+        match self.as_range() {
+            Some(Value::Range(r)) => Ok(r),
+            _ => Err(ValueError::TypeConversion(own_type, ValueType::Range)),
+        }
+    }
+
+    /// Sort this value
+    /// For arrays, this sorts the array in place
+    /// For all other types, this does nothing as by definition they are already sorted
+    /// (length 1, or unordered)
+    pub fn sort(&mut self) {
+        match self {
+            Value::Array(a) => a.sort_by(|a, b| a.cmp(b)),
+            _ => {}
         }
     }
 }
@@ -653,7 +483,7 @@ impl Value {
 impl CheckedArithmetic for Value {
     fn checked_add(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_add(b).map(Value::Primitive),
             (Value::Array(mut a), Value::Array(mut b)) => {
@@ -672,7 +502,7 @@ impl CheckedArithmetic for Value {
 
     fn checked_sub(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_sub(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -681,7 +511,7 @@ impl CheckedArithmetic for Value {
 
     fn checked_mul(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_mul(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -690,7 +520,7 @@ impl CheckedArithmetic for Value {
 
     fn checked_div(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_div(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -699,7 +529,7 @@ impl CheckedArithmetic for Value {
 
     fn checked_rem(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_rem(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -708,7 +538,7 @@ impl CheckedArithmetic for Value {
 
     fn checked_pow(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_pow(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -716,7 +546,7 @@ impl CheckedArithmetic for Value {
     }
 
     fn checked_neg(self) -> Result<Self, ValueError> {
-        let t = self.type_of(None)?;
+        let t = self.type_of();
         match self {
             Value::Primitive(p) => p.checked_neg().map(Value::Primitive),
             Value::Array(a) => Ok(Value::Array(a.into_iter().rev().collect())),
@@ -728,7 +558,7 @@ impl CheckedArithmetic for Value {
 impl CheckedBitwise for Value {
     fn checked_and(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_and(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -737,7 +567,7 @@ impl CheckedBitwise for Value {
 
     fn checked_or(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_or(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -746,7 +576,7 @@ impl CheckedBitwise for Value {
 
     fn checked_xor(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_xor(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -755,7 +585,7 @@ impl CheckedBitwise for Value {
 
     fn checked_shl(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_shl(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -764,7 +594,7 @@ impl CheckedBitwise for Value {
 
     fn checked_shr(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => a.checked_shr(b).map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -772,7 +602,7 @@ impl CheckedBitwise for Value {
     }
 
     fn checked_not(self) -> Result<Self, ValueError> {
-        let t = self.type_of(None)?;
+        let t = self.type_of();
         match self {
             Value::Primitive(p) => p.checked_not().map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -783,7 +613,7 @@ impl CheckedBitwise for Value {
 impl CheckedBoolean for Value {
     fn checked_logical_and(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => {
                 a.checked_logical_and(b).map(Value::Primitive)
@@ -794,7 +624,7 @@ impl CheckedBoolean for Value {
 
     fn checked_logical_or(self, other: Self) -> Result<Self, ValueError> {
         let (a, b) = self.resolve(other)?;
-        let t = a.type_of(None)?;
+        let t = a.type_of();
         match (a, b) {
             (Value::Primitive(a), Value::Primitive(b)) => {
                 a.checked_logical_or(b).map(Value::Primitive)
@@ -804,7 +634,7 @@ impl CheckedBoolean for Value {
     }
 
     fn checked_logical_not(self) -> Result<Self, ValueError> {
-        let t = self.type_of(None)?;
+        let t = self.type_of();
         match self {
             Value::Primitive(p) => p.checked_logical_not().map(Value::Primitive),
             _ => Err(ValueError::InvalidOperationForType(t)),
@@ -935,7 +765,7 @@ impl CheckedMatching for Value {
                 Value::checked_regex(&a, &b, |s| s)?
             }
 
-            _ => return Err(ValueError::InvalidOperationForType(self.type_of(None)?)),
+            _ => return Err(ValueError::InvalidOperationForType(self.type_of())),
         })
     }
 
@@ -955,7 +785,7 @@ impl CheckedMatching for Value {
                 Ok(Value::boolean(b.start == a.start && b.end <= a.end))
             }
 
-            (a, _) => Err(ValueError::InvalidOperationForType(a.type_of(None)?)),
+            (a, _) => Err(ValueError::InvalidOperationForType(a.type_of())),
         }
     }
 
@@ -975,7 +805,7 @@ impl CheckedMatching for Value {
                 Ok(Value::boolean(a.end == b.end && b.start >= a.start))
             }
 
-            (a, _) => Err(ValueError::InvalidOperationForType(a.type_of(None)?)),
+            (a, _) => Err(ValueError::InvalidOperationForType(a.type_of())),
         }
     }
 
@@ -1020,10 +850,6 @@ impl std::fmt::Debug for Value {
             Value::Range(r) => {
                 write!(f, "{}..{}", r.start, r.end)?;
             }
-
-            Value::Reference(reference) => {
-                write!(f, "REF({:08X})", reference.hash())?;
-            }
         }
 
         Ok(())
@@ -1052,7 +878,6 @@ impl std::fmt::Display for Value {
                     .join(", ")
             )?,
             Value::Range(v) => write!(f, "{}..{}", v.start, v.end)?,
-            Value::Reference(v) => write!(f, "{:?}", v)?,
         }
 
         Ok(())
@@ -1092,10 +917,6 @@ impl SerializeToBytes for Value {
                 bytes.push(ValueType::Range as u8);
                 bytes.extend(r.start.serialize_into_bytes());
                 bytes.extend(r.end.serialize_into_bytes());
-            }
-
-            Value::Reference(..) => {
-                bytes.push(ValueType::Boolean as u8);
             }
         }
 

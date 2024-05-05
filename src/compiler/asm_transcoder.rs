@@ -303,7 +303,6 @@ impl<'src> ASMTranscoder<'src> {
         let opcode = self.buffer.next()?;
         let opcode = OpCode::from_u8(opcode)?;
 
-        println!("Opcode: {:?}", opcode);
         match &opcode {
             OpCode::PUSH => {
                 let len = self.buffer.len();
@@ -362,6 +361,11 @@ impl<'src> ASMTranscoder<'src> {
             }
 
             OpCode::POP
+            | OpCode::SORT
+            | OpCode::TYPE
+            | OpCode::PRNTM
+            | OpCode::THRW
+            | OpCode::VREF
             | OpCode::DUP
             | OpCode::SWP
             | OpCode::RREF

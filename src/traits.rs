@@ -1,5 +1,37 @@
 //! Traits used for various parts of the compiler
 
+/// Trait for catching memory allocation errors
+pub trait SafeVecAlloc {
+    fn safe_alloc(size: usize) -> Result<Self, std::collections::TryReserveError>
+    where
+        Self: Sized;
+}
+
+impl<T> SafeVecAlloc for Vec<T> {
+    fn safe_alloc(size: usize) -> Result<Self, std::collections::TryReserveError>
+    where
+        Self: Sized,
+    {
+        let mut vec = Self::new();
+        vec.try_reserve(size)?;
+        Ok(vec)
+    }
+}
+
+impl<K, V> SafeVecAlloc for std::collections::HashMap<K, V>
+where
+    K: std::cmp::Eq + std::hash::Hash + PartialEq,
+{
+    fn safe_alloc(size: usize) -> Result<Self, std::collections::TryReserveError>
+    where
+        Self: Sized,
+    {
+        let mut map = Self::new();
+        map.try_reserve(size)?;
+        Ok(map)
+    }
+}
+
 /// Trait for converting a type into an owned version of itself
 pub trait IntoOwned {
     /// The owned version of the type
@@ -40,6 +72,10 @@ pub enum ByteDecodeError {
     /// Invalid data was found
     #[error("Invalid data: {1}\n= In `{0}`")]
     MalformedData(String, String),
+
+    /// Error during memory allocation
+    #[error("{0}")]
+    MemoryAllocation(#[from] std::collections::TryReserveError),
 }
 
 /// Trait for serializing and deserializing types to bytes
@@ -213,7 +249,7 @@ where
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, ByteDecodeError> {
         let len = u64::deserialize_from_bytes(bytes)?;
-        let mut items = Vec::with_capacity(len as usize);
+        let mut items = Vec::safe_alloc(len as usize)?;
         for _ in 0..len {
             items.push(T::deserialize_from_bytes(bytes)?);
         }

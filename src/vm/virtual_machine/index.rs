@@ -2,10 +2,13 @@ use std::{collections::HashMap, ops::Range};
 
 use crate::{
     value::{Primitive, Value},
-    vm::error::{RuntimeError, RuntimeErrorType},
+    vm::{
+        error::{RuntimeError, RuntimeErrorType},
+        value_source::{ValueReference, ValueSource},
+    },
 };
 
-use super::{RefExt, StackExt};
+use super::StackExt;
 
 pub type Map = HashMap<Primitive, Value>;
 
@@ -13,34 +16,35 @@ pub trait IndexExt {
     fn index_into(&mut self) -> Result<(), RuntimeError>;
 }
 
-impl IndexExt for super::ExecutionContext {
+impl IndexExt for super::VirtualMachine {
     #[inline(always)]
     fn index_into(&mut self) -> Result<(), RuntimeError> {
         // Ok this one is a bit of a workhorse
         // It's used for indexing, references, and assignments
         // First we pop [base, index] off the stack
-        let index = self.pop()?;
-        let base = self.pop()?;
-
-        let index = self.resolve_reference(index)?;
+        let index = self.pop_value()?;
+        let mut base = self.pop()?;
 
         // Now we branch on whether the base is a reference
         match base {
-            Value::Reference(mut reference) => {
-                // This is the easiest cast, we just add the new index to the ref path
-                // The actual work of checking the reference happens when the value is used
-                reference
-                    .resolve(&mut self.mem)
-                    .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
-                reference
-                    .add_index(index)
-                    .map_err(|e| self.emit_err(RuntimeErrorType::Value(e)))?;
-                self.push(Value::Reference(reference));
+            ValueSource::Reference(ValueReference::Unresolved(name_hash)) => {
+                let slot = self
+                    .mem
+                    .get_ref(name_hash)
+                    .ok_or_else(|| self.emit_err(RuntimeErrorType::HashNotFound))?;
+                base = ValueSource::resolved(slot, vec![index]);
+                self.push(base);
             }
 
-            Value::Primitive(Primitive::String(string)) => {
+            ValueSource::Reference(ValueReference::Resolved(slot, mut path)) => {
+                path.push(index);
+                base = ValueSource::resolved(slot, path);
+                self.push(base);
+            }
+
+            ValueSource::Literal(Value::Primitive(Primitive::String(string))) => {
                 // If the base is a string, we're getting some chars
-                self.push(match index {
+                self.push_value(match index {
                     Value::Range(range) => {
                         idx_string_by_range(string, range).map_err(|e| self.emit_err(e))?
                     }
@@ -54,52 +58,62 @@ impl IndexExt for super::ExecutionContext {
                 });
             }
 
-            Value::Range(range) => {
+            ValueSource::Literal(Value::Range(range)) => {
                 // If the base is a range, we're getting a set of values
                 match index {
                     Value::Array(array) => {
-                        self.push(idx_range_by_arr(range, array).map_err(|e| self.emit_err(e))?);
+                        self.push_value(
+                            idx_range_by_arr(range, array).map_err(|e| self.emit_err(e))?,
+                        );
                     }
                     Value::Range(index_rng) => {
-                        self.push(
+                        self.push_value(
                             idx_range_by_range(range, index_rng).map_err(|e| self.emit_err(e))?,
                         );
                     }
                     Value::Primitive(p) => {
-                        self.push(idx_range_by_val(range, p).map_err(|e| self.emit_err(e))?);
+                        self.push_value(idx_range_by_val(range, p).map_err(|e| self.emit_err(e))?);
                     }
 
                     _ => return Err(self.emit_err(RuntimeErrorType::IndexingType)),
                 }
             }
 
-            Value::Array(array) => {
+            ValueSource::Literal(Value::Array(array)) => {
                 // If the base is an array, we're getting a value
                 match index {
                     Value::Range(range) => {
-                        self.push(idx_arr_by_range(array, range).map_err(|e| self.emit_err(e))?);
+                        self.push_value(
+                            idx_arr_by_range(array, range).map_err(|e| self.emit_err(e))?,
+                        );
                     }
                     Value::Array(index_arr) => {
-                        self.push(idx_arr_by_arr(array, index_arr).map_err(|e| self.emit_err(e))?);
+                        self.push_value(
+                            idx_arr_by_arr(array, index_arr).map_err(|e| self.emit_err(e))?,
+                        );
                     }
                     Value::Primitive(p) => {
-                        self.push(idx_arr_by_val(array, p).map_err(|e| self.emit_err(e))?);
+                        self.push_value(idx_arr_by_val(array, p).map_err(|e| self.emit_err(e))?);
                     }
                     _ => return Err(self.emit_err(RuntimeErrorType::IndexingType)),
                 }
             }
 
-            Value::Object(object) => {
+            ValueSource::Literal(Value::Object(object)) => {
                 // If the base is an object, we're getting a value
                 match index {
                     Value::Range(range) => {
-                        self.push(idx_obj_by_range(object, range).map_err(|e| self.emit_err(e))?);
+                        self.push_value(
+                            idx_obj_by_range(object, range).map_err(|e| self.emit_err(e))?,
+                        );
                     }
                     Value::Array(index_arr) => {
-                        self.push(idx_obj_by_arr(object, index_arr).map_err(|e| self.emit_err(e))?);
+                        self.push_value(
+                            idx_obj_by_arr(object, index_arr).map_err(|e| self.emit_err(e))?,
+                        );
                     }
                     Value::Primitive(p) => {
-                        self.push(idx_obj_by_val(object, p).map_err(|e| self.emit_err(e))?);
+                        self.push_value(idx_obj_by_val(object, p).map_err(|e| self.emit_err(e))?);
                     }
                     _ => return Err(self.emit_err(RuntimeErrorType::IndexingType)),
                 }
@@ -123,7 +137,7 @@ fn idx_string_by_val(base: String, index: Primitive) -> Result<Value, RuntimeErr
             let c = base
                 .chars()
                 .nth(i as usize)
-                .ok_or(RuntimeErrorType::IndexingValue)?;
+                .ok_or_else(|| RuntimeErrorType::IndexingValue)?;
             Ok(Value::string(c.to_string()))
         }
         _ => Err(RuntimeErrorType::IndexingType),
@@ -141,7 +155,7 @@ fn idx_string_by_arr(base: String, index: Vec<Value>) -> Result<Value, RuntimeEr
             let i = if *i < 0 { base.len() as i128 + i } else { *i };
             base.chars()
                 .nth(i as usize)
-                .ok_or(RuntimeErrorType::IndexingValue)
+                .ok_or_else(|| RuntimeErrorType::IndexingValue)
         })
         .collect::<Result<String, RuntimeErrorType>>()?;
     Ok(Value::string(s))
@@ -212,7 +226,7 @@ fn idx_arr_by_val(base: Vec<Value>, index: Primitive) -> Result<Value, RuntimeEr
             let value = base
                 .into_iter()
                 .nth(i as usize)
-                .ok_or(RuntimeErrorType::IndexingValue)?;
+                .ok_or_else(|| RuntimeErrorType::IndexingValue)?;
             Ok(value)
         }
         _ => Err(RuntimeErrorType::IndexingType),
@@ -237,7 +251,7 @@ fn idx_arr_by_arr(base: Vec<Value>, index: Vec<Value>) -> Result<Value, RuntimeE
     for i in indices.into_iter() {
         values.push(
             iter.nth((i - b) as usize)
-                .ok_or(RuntimeErrorType::IndexingValue)?,
+                .ok_or_else(|| RuntimeErrorType::IndexingValue)?,
         );
         b += i;
     }
@@ -256,7 +270,8 @@ fn idx_arr_by_range(base: Vec<Value>, index: Range<i128>) -> Result<Value, Runti
 
 #[inline(always)]
 fn idx_obj_by_val(mut base: Map, index: Primitive) -> Result<Value, RuntimeErrorType> {
-    base.remove(&index).ok_or(RuntimeErrorType::IndexingValue)
+    base.remove(&index)
+        .ok_or_else(|| RuntimeErrorType::IndexingValue)
 }
 #[inline(always)]
 fn idx_obj_by_arr(mut base: Map, index: Vec<Value>) -> Result<Value, RuntimeErrorType> {
@@ -266,7 +281,10 @@ fn idx_obj_by_arr(mut base: Map, index: Vec<Value>) -> Result<Value, RuntimeErro
         .collect::<Result<Vec<_>, _>>()?;
     let mut values = vec![];
     for i in indices.iter() {
-        values.push(base.remove(i).ok_or(RuntimeErrorType::IndexingValue)?);
+        values.push(
+            base.remove(i)
+                .ok_or_else(|| RuntimeErrorType::IndexingValue)?,
+        );
     }
     Ok(Value::Array(values))
 }

@@ -4,7 +4,7 @@ use lavendeux_parser::{
     parser::{self, Node},
     traits::SerializeToBytes,
     value::StdFunctionSet,
-    vm::ExecutionContext,
+    vm::VirtualMachine,
 };
 
 mod options;
@@ -64,8 +64,8 @@ fn exec_mode(options: CliOptions) -> Result<(), String> {
             };
 
             // Run the bytecode to gather the functions into memory
-            let mut context = ExecutionContext::new(bytecode, profile.clone());
-            if let Err(e) = context.run() {
+            let mut context = VirtualMachine::new();
+            if let Err(e) = context.run(bytecode, profile.clone()) {
                 return Err(format!("{}", e));
             }
 

@@ -107,17 +107,17 @@ define_node!(BlockNode(lines: Vec<Node<'source>>) {
 
     compile(this, compiler) {
         compiler.push_token(this.token);
-        compiler.push(OpCode::SCI); // Block scope
 
         let len = this.lines.len();
         for (i, line) in this.lines.into_iter().enumerate() {
             line.compile(compiler)?;
             if i < len - 1 {
                 compiler.push(OpCode::POP);
+            } else {
+                compiler.push(OpCode::RREF);
             }
         }
 
-        compiler.push(OpCode::SCO); // Block scope
         Ok(())
     }
 

@@ -57,6 +57,8 @@ pratt_node!(AssignArithmeticExprNode(target: Node<'source>, value: Node<'source>
 
     compile(this, compiler) {
         compiler.push_token(this.token);
+
+        this.target.compile(compiler)?;
         compiler.push(OpCode::DUP); // Duplicate target reference, one for assignment and one for arithmetic operation
 
         this.value.compile(compiler)?;
@@ -71,7 +73,7 @@ pratt_node!(AssignArithmeticExprNode(target: Node<'source>, value: Node<'source>
             ArithmeticOp::Pow => OpCode::POW,
         });
 
-        this.target.compile(compiler)?;
+        compiler.push(OpCode::SWP); // Swap target reference to top of stack
         compiler.push(OpCode::WREF);
         Ok(())
     }

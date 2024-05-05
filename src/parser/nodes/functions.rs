@@ -16,7 +16,7 @@ use crate::{
 define_node!(FnAssignNode(
     name_span: TokenSpan,
     returns: Option<TokenSpan>,
-    args: Vec<(TokenSpan, Option<TokenSpan>, Option<Node<'source>>)>, // (name, type, default)
+    args: Vec<(TokenSpan, Option<TokenSpan>, Option<Node<'source>>, bool)>, // (name, type, default, by_ref)
     body: Node<'source>,
     docs: Vec<Token<'source>>,
 ) {
@@ -27,7 +27,7 @@ define_node!(FnAssignNode(
     "Args can have optional types and default values, e.g. `foo(a: int, b: int = 0) {}`"
     "`
         DocBlockComment* ~ At? ~ Identifer ~ EOL* ~ LParen ~ EOL* ~
-            (Identifier ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ (Assign ~ EXPR)? ~ EOL* ~ Comma ~ EOL*)* ~ (Identifier ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ (Assign ~ EXPR)?)? ~ EOL* ~ 
+            (ref? ~ Identifier ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ (Assign ~ EXPR)? ~ EOL* ~ Comma ~ EOL*)* ~ (ref? ~ Identifier ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ (Assign ~ EXPR)?)? ~ EOL* ~ 
         RParen ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ EOL* ~ Assign ~ Block
     `"
 
@@ -56,11 +56,12 @@ define_node!(FnAssignNode(
         // EOL* ~ LParen ~ EOL*
         terminal!(LParen, tokens, skip_eol!(tokens))?;
 
-        // (Identifier ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ (Assign ~ EXPR)? ~ EOL* ~ Comma ~ EOL*)*
+        // (ref? ~ Identifier ~ (EOL* ~ COLON ~ IDENTIFIER)? ~ (Assign ~ EXPR)? ~ EOL* ~ Comma ~ EOL*)*
         let mut args = vec![];
         loop {
             tokens.start_transaction();
 
+            let by_ref = terminal!(Reference?, tokens).is_some();
             match terminal!(LiteralIdent, tokens) {
                 Some(arg) => {
                     // (EOL* ~ COLON ~ IDENTIFIER)?
@@ -102,7 +103,7 @@ define_node!(FnAssignNode(
                         }
                     };
 
-                    args.push((arg.span(), argtype, default));
+                    args.push((arg.span(), argtype, default, by_ref));
                     if terminal!(Comma?, tokens, skip_eol!(tokens)).is_none() {
                         tokens.apply_transaction();
                         break;
@@ -117,6 +118,7 @@ define_node!(FnAssignNode(
         }
 
         // Identifier? ~ EOL*
+        let by_ref = terminal!(Reference?, tokens).is_some();
         if let Some(arg) = terminal!(LiteralIdent?, tokens, skip_eol!(tokens)) {
             // (EOL* ~ COLON ~ IDENTIFIER)?
             let argtype = {
@@ -158,7 +160,7 @@ define_node!(FnAssignNode(
                 }
             };
 
-            args.push((arg.span(), argtype, default));
+            args.push((arg.span(), argtype, default, by_ref));
         }
 
         // RParen
@@ -204,7 +206,7 @@ define_node!(FnAssignNode(
         let name = this.token.input();
         let name = name[this.name_span.start..this.name_span.end].to_string();
 
-        let arguments = this.args.into_iter().map(|(name, ty, default)| {
+        let arguments = this.args.into_iter().map(|(name, ty, default, by_ref)| {
             let name = this.token.input()[name.start..name.end].to_string();
             let ty = ty.map(|ty| {
                 let ty = &this.token.input()[ty.start..ty.end];
@@ -220,7 +222,7 @@ define_node!(FnAssignNode(
                 None => FunctionArgumentDefault::None
             };
 
-            (name, ty, default)
+            (name, ty, default, by_ref)
         }).collect::<Vec<_>>();
 
         let returns = this.returns.map(|returns| {
@@ -230,7 +232,7 @@ define_node!(FnAssignNode(
 
         compiler.push_token(this.token);
 
-        let arg_names = arguments.iter().map(|(name, _, _)| name.as_str()).collect::<Vec<_>>();
+        let arg_names = arguments.iter().map(|(name, ..)| name.as_str()).collect::<Vec<_>>();
         let doc_strings = this.docs.iter().map(|t| t.slice()[3..].trim()).collect::<Vec<_>>();
         let doc = FunctionDocs::parse_docblock(&name, arg_names.as_slice(), &doc_strings);
 
@@ -240,11 +242,12 @@ define_node!(FnAssignNode(
             ty: returns,
             dbg: None,
             doc,
-            args: arguments.into_iter().map(|(name, ty, default)| {
+            args: arguments.into_iter().map(|(name, ty, default, by_ref)| {
                 FunctionArgumentCompiler {
                     name,
                     ty,
-                    default
+                    default,
+                    by_ref
                 }
             }).collect()
         };
@@ -262,8 +265,8 @@ define_node!(FnAssignNode(
         Self::Owned {
             name_span: this.name_span,
             returns: this.returns,
-            args: this.args.into_iter().map(|(name, ty, default)| {
-                (name, ty, default.map(|d| d.into_owned()))
+            args: this.args.into_iter().map(|(name, ty, default, by_ref)| {
+                (name, ty, default.map(|d| d.into_owned()), by_ref)
             }).collect(),
             body: this.body.into_owned(),
             docs: this.docs.into_iter().map(|t| t.into_owned()).collect(),

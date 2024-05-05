@@ -14,11 +14,4 @@ if [ "$1" == "--debug" ]; then
     DEBUG_FLAG="-D"
 fi
 
-# Define source file paths
-SOURCE_PATHS="stdlib/src/math.lav stdlib/src/system.lav"
-
-for p in $SOURCE_PATHS; do
-    echo "Compiling $p..."
-    cargo run --bin compiler -- -F -f "$p" -o "$(dirname "$p")/$(basename -s .lav "$p").bin" --allow-syscalld $DEBUG_FLAG
-    echo
-done
+cargo run --bin compiler -- -F -f "stdlib/src/stdlib.lav" -o "stdlib/stdlib.lbc" --allow-syscalld $DEBUG_FLAG

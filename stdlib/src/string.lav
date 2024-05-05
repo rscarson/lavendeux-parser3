@@ -9,9 +9,44 @@
 //# ```lav
 //# repeat("Hello", 3) == "HelloHelloHello"
 repeat(s: string, n: integer): string = {
-    result = s
-    for i in 1..n-1 do {
-        result = result + s
+    result = ""
+    for i in 0..n do result += s
+    result
+}
+
+//# category: String
+//# Compose an array of strings into a single string
+//# ```lav
+//# concat(["Hello", " ", "World"]) == "Hello World"
+concat(a: array): string = {
+    result = ""
+    for i in a do {
+        result = result + i
     }
-    s
+    result
+}
+
+split(s: string, sep: string): array = {
+    locations = s.find(sep)
+    result = []
+    for i in 0..locations.len() do {
+        result.push(s[0..i])
+        s = s[i+sep.len()..s.len()]
+    }
+    result.push(s)    
+}
+
+format(pattern: string, args: array): string = {
+    out = ""
+    parts = [""] + pattern.split("{}")
+    if parts.len() != args.len() {
+        throw(pattern+"\n= Pattern contained "+parts.len()+" `{}`, but "+args.len()+" arguments were provided.")
+    } else {
+        blanks = parts.zip(args).flatten()
+        out = ""
+        for i in blanks do {
+            out += i
+        }
+        out
+    }
 }

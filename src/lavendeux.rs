@@ -4,13 +4,13 @@ use crate::{
     lexer::Stack,
     parser::{core::ScriptNode, ParserNode},
     value::Value,
-    vm::{memory_manager::MemoryManager, ExecutionContext},
+    vm::{memory_manager::MemoryManager, VirtualMachine},
 };
 
 /// Main structure for interacting with the Lavendeux parser
 /// Allows compiling and running Lavendeux source code
 pub struct Lavendeux {
-    memory: Option<MemoryManager>,
+    vm: VirtualMachine,
     options: CompilerOptions,
 }
 
@@ -18,10 +18,7 @@ impl Lavendeux {
     /// Create a new Lavendeux instance
     /// Allocates a new memory manager for the instance
     pub fn new() -> Self {
-        Self {
-            memory: Some(MemoryManager::new()),
-            options: Default::default(),
-        }
+        Self::with_options(CompilerOptions::default())
     }
 
     /// Create a new Lavendeux instance with custom compiler options
@@ -31,7 +28,7 @@ impl Lavendeux {
         mem.load_stdlib();
 
         Self {
-            memory: Some(mem),
+            vm: VirtualMachine::with_mem(mem),
             options,
         }
     }
@@ -59,7 +56,7 @@ impl Lavendeux {
         let tokens = lexer.all_tokens()?;
 
         let mut stack = Stack::new(tokens);
-        let ast = ScriptNode::parse(&mut stack).ok_or(stack.emit_err())?;
+        let ast = ScriptNode::parse(&mut stack).ok_or_else(|| stack.emit_err())?;
 
         let mut compiler = crate::compiler::Compiler::new(source, self.options.clone());
         ast.compile(&mut compiler)?;
@@ -81,11 +78,7 @@ impl Lavendeux {
         bytecode: Vec<u8>,
         profile: Option<DebugProfile>,
     ) -> Result<Value, Error> {
-        let mut context =
-            ExecutionContext::with_mem(bytecode, profile, self.memory.take().unwrap());
-        let result = context.run();
-        self.memory = Some(context.destroy());
-        Ok(result?)
+        self.vm.run(bytecode, profile).map_err(Error::Runtime)
     }
 
     /// Run a source string.

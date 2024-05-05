@@ -1,0 +1,236 @@
+/**
+ * Lavendeux Standard Library
+ * Copyright Richard Carson, 2024
+ * Licensed under the MIT License
+ */
+
+//# category: Collections
+//# Returns the length of the given value
+//# Non collection types always have a length of 1
+//# ```lav
+//# len([1, 2, 3]) // 3
+//# len("hello") // 5
+//# len(1) // 1
+len(input): int = __syscalld(LEN, input)
+
+//# category: Collections
+//# Insert a value at the given index in the given collection
+//# Returns the resulting collection
+//# ```lav
+//# a = [1, 2, 3]
+//# a.insert(1, 4)
+insert(ref c: collection, i: primitive, v): collection = {
+    type = c.type_of()
+    if ["array", "string"] contains type {
+        c = c[0..i] + v + c[i..c.len()]
+    } else if type == "object" {
+        c += {i: v}
+    } else {
+        throw("Cannot insert into this type")
+    }
+}
+
+//# category: Collections
+//# Remove the element at the given index in the given array
+//# Returns the resulting value
+//# Equivalent to `del c[i]`
+//# ```lav
+//# a = [1, 2, 3]
+//# a.remove(1) == 2
+remove(ref c: collection, i: primitive): collection = del c[i]
+
+//# category: Collections
+//# Push a value onto a collection
+//# Returns the resulting collection
+//# ```lav
+//# a = [1]
+//# a.push(2)
+push(ref c: collection, v): collection = switch c.type_of() {
+    "array" => c += [v],
+    "string" => c += v as string,
+    "object" => c += v,
+    _ => throw("Cannot push onto this type")
+}
+
+//# category: Collections
+//# Pop a value from a collection
+//# Returns the resulting value
+//# Throws an error if the collection is empty
+//# ```lav
+//# a = [1, 2]
+//# a.pop()
+pop(ref c: collection): any = c.len()==0 ? throw("Collection is empty") : del c[-1]
+
+//# category: Collections
+//# Return a copy of the first element of a collection
+//# Throws an error if the collection or string is empty
+//# ```lav
+//# a = [1, 2]
+//# a.first()
+first(input: collection): any = input.len()==0 ? throw("Collection is empty") : input[0]
+
+//# category: Collections
+//# Return a copy of the last element of a collection
+//# Throws an error if the collection is empty
+//# ```lav
+//# a = [1, 2]
+//# a.last()
+last(input: array): any = input.len()==0 ? throw("Collection is empty") : input[-1]
+
+//# category: Collections
+//# Return the keys of the given object
+//# ```lav
+//# keys({a: 1, b: 2}) == ["a", "b"]
+keys(input: object): array = for k in input do k
+
+//# category: Collections
+//# Return the values of the given object
+//# ```lav
+//# values({a: 1, b: 2}) == [1, 2]
+values(input: object): array = for k in input do input[k]
+
+//# category: Collections
+//# Zip two arrays together
+//# Returns an array of arrays, where each subarray contains the corresponding elements of the two input arrays
+//# Throws an error if the arrays are not the same length
+//# ```lav
+//# zip([1, 2], [3, 4]) == [[1, 3], [2, 4]]
+zip(l: array, r: array): array = if l.len() == r.len() {
+    for i in 0..l.len() do [l[i], r[i]]
+} else throw("Arrays must be the same length") 
+
+//# category: Collections
+//# Zip two arrays together into an object
+//# Returns an object, where the keys are the elements of the first array, and the values are the corresponding elements of the second array
+//# Throws an error if the arrays are not the same length
+//# ```lav
+//# zop(["a", "b"], [1, 2]) == {"a": 1, "b": 2}
+zop(l: array, r: array): object = {
+    out = {}
+    for element in l.zip(r) do {
+        out[element[0]] = element[1]
+    }
+    out
+}
+
+//# category: Collections
+//# Reverse the given array or string
+//# Returns the reversed array or string
+//# Throws an error if the collection is not an array or string
+//# ```lav
+//# reverse([1, 2, 3]) == [3, 2, 1]
+reverse(c: collection): array = {
+    type = c.type_of()
+    if type == "array" {
+        for i in 0..c.len() do c[c.len()-i-1]
+    } else if type == "string" {
+        out = ""
+        for i in 0..c.len() do out += c[c.len()-i-1]
+        out
+    } else {
+        throw("Cannot reverse this type of collection")
+    }
+}
+
+//# category: Collections
+//# Returns true if all elements of the given collection are truthy
+//# ```lav
+//# all([1, 2, 3]) == true
+all(input: any): bool = {
+    for i in input do return false where !i
+    true
+}
+
+//# category: Collections
+//# Returns true if any element of the given collection is truthy
+//# ```lav
+//# any([0, 1, 2]) == true
+any(input: array): bool = {
+    for i in input do return true where i
+    false
+}
+
+//# category: Collections
+//# Flattens the given array of arrays into a single array, and returns the result
+//# The function is recursive, and will flatten nested arrays
+//# ```lav
+//# flatten([[1, 2], [3, 4]]) == [1, 2, 3, 4]
+flatten(input: array): array = {
+    out = []
+    for i in input do {
+        if i.type_of() == "array" {
+            out += i.flatten()
+        } else {
+            out += i
+        }
+    }
+    out
+}
+
+//# category: Collections
+//# Returns the indices of all occurrences of the given value in the given collection
+//# ```lav
+//# find([1, 2, 3, 2], 2) == [1, 3]
+//# find("hello", "l") == [2, 3]
+//# find({a: 1, b: 2, c: 1}, 1) == ["a", "c"]
+find(input: collection, value): array = switch input.type_of() {
+    "object" => for k in input do k where input[k] == value,
+    "string" => {
+        start_i = []
+        buf = ""
+        i = 0; j = 0
+        for c in input do {
+            buf.push(c)
+            if buf.len() > value.len() {
+                del buf[0]
+                j += 1
+            } else nil
+
+            if buf == value {
+                start_i.push(j)
+                buf = ""
+                j = i
+            } else nil
+
+            i += 1;
+        }
+        start_i
+    },
+    _ => for i in 0..input.len() do i where input[i] == value
+}
+
+//# category: Collections
+//# Sort the given value, and return the result
+//# Sort order of types is as follows:
+//# Array > String > Float > Int > Bool > [Object, Function, Range]
+//# ```lav
+//# sort([3, 1, 2]) == [1, 2, 3]
+sort(input) = __syscalld(SORT, input)
+
+//# category: Collections
+//# Splits the given array at the given index, and returns the two resulting arrays         
+//# ```lav
+//# split([1, 2, 3], 1) == [[1], [2, 3]]
+split(input: array, i:int): array = [input[0..i], input[i..input.len()]]
+
+//# category: Collections
+//# Splits the given array into chunks of the given size, and returns the resulting array of arrays
+//# ```lav
+//# chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
+chunks(input: array, n: int): array = {
+    out = []
+    buffer = []
+    for element in input {
+        buffer.push(element)
+        if buffer.len() == n {
+            out.push(buffer)
+            buffer = []
+        } else nil
+    }
+
+    if buffer.len() > 0 {
+        out.push(buffer)
+    } else nil
+
+    out
+}

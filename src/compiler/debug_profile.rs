@@ -1,6 +1,6 @@
 use crate::{
     lexer::{SerializedToken, Token},
-    traits::SerializeToBytes,
+    traits::{SafeVecAlloc, SerializeToBytes},
 };
 
 /// Maps ranges in bytecode to source code locations.
@@ -35,12 +35,15 @@ impl DebugProfile {
         }
     }
 
+    fn unpack(&self, token: &SerializedToken) -> Token<'_> {
+        let source = self.get_source(token.filename.as_deref()).unwrap();
+        SerializedToken::unpack(token, source)
+    }
+
     /// Get the token at the given index.
     fn get(&self, index: usize) -> Option<(usize, Token<'_>)> {
         let (start, packed) = self.map.get(index)?;
-        let source = self.get_source(packed.filename.as_deref())?;
-        let token = SerializedToken::unpack(packed, source);
-        Some((*start, token))
+        Some((*start, self.unpack(&packed)))
     }
 
     /// Insert a token into the profile.
@@ -74,13 +77,25 @@ impl DebugProfile {
     pub fn current_token(&self, index: usize) -> Option<Token<'_>> {
         // Search the map, returning the last token that starts before the index.
         let i = self.map.partition_point(|(start, _)| *start <= index);
-        let i = match i {
-            0 => 0,
-            i => i - 1,
-        };
 
-        let (_, token) = self.get(i)?;
-        Some(token)
+        let matches = &self.map[0..i];
+        let mut matches = matches.iter().rev().peekable();
+
+        let (start, token) = matches.next()?;
+        if index == *start {
+            return Some(self.unpack(token));
+        }
+
+        // Skip to the most general token that matches
+        //    let mut next = matches.next()?;
+        //     while let Some((start, _)) = matches.peek() {
+        //         next = matches.next()?;
+        //         if *start != next.0 && next.0 != index {
+        //             break;
+        //         }
+        //     }
+
+        return Some(self.unpack(token));
     }
 
     /// Get the source code for all tokens, mapped to their start position.
@@ -116,7 +131,7 @@ impl SerializeToBytes for DebugProfile {
         bytes: &mut impl Iterator<Item = u8>,
     ) -> Result<Self, crate::traits::ByteDecodeError> {
         let nsources = usize::deserialize_from_bytes(bytes)?;
-        let mut sources = Vec::with_capacity(nsources);
+        let mut sources = Vec::safe_alloc(nsources)?;
         for _ in 0..nsources {
             let name = String::deserialize_from_bytes(bytes)?;
             let source = String::deserialize_from_bytes(bytes)?;
@@ -124,7 +139,7 @@ impl SerializeToBytes for DebugProfile {
         }
 
         let ntokens = usize::deserialize_from_bytes(bytes)?;
-        let mut map = Vec::with_capacity(ntokens);
+        let mut map = Vec::safe_alloc(ntokens)?;
         for _ in 0..ntokens {
             let start = usize::deserialize_from_bytes(bytes)?;
             let token = SerializedToken::deserialize_from_bytes(bytes)?;

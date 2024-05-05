@@ -5,25 +5,6 @@ use super::ValueType;
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum ValueError {
     //
-    // Errors during reference resolution
-    //
-
-    /// Caused by attempting to resolve a reference that is not in memory
-    #[error("Variable not defined\n= You can assign a value with `name = ...`")]
-    HashNotFound,
-
-    /// Caused by attempting to pull a value from a slot that is no longer valid
-    /// This should never happen, I think? It's a bug if it does probably
-    /// It would mean we leaked a reference without resolving it
-    #[error("A value reference is invalid.\n= This is likely a bug in the Lavendeux VM.")]
-    SlotRefInvalid,
-
-    /// Caused by attempting to use a reference that is not resolved
-    /// This is always a bug
-    #[error("A reference was used before it was resolved.\n= This is a bug in the Lavendeux VM.\n= Error occurred in `Reference::{0}()`")]
-    ReferenceNotResolved(String),
-
-    //
     // Errors during casting and arithmetic operations
     //
 
@@ -38,6 +19,10 @@ pub enum ValueError {
     /// Caused by converting a value to a type that is not supported
     #[error("Cannot resolve values of type {0} and {1}")]
     TypeConversion(ValueType, ValueType),
+
+    /// Caused by attempting to use the bigliest memory
+    #[error("{0}")]
+    MemoryAllocation(#[from] std::collections::TryReserveError),
 
     //
     // Errors during indexing
@@ -56,8 +41,8 @@ pub enum ValueError {
     CannotIndexInto(ValueType),
 
     /// Caused by attempting to use a value as an index that is not supported
-    #[error("Cannot use {0} as an index")]
-    CannotIndexUsing(ValueType),
+    #[error("Cannot use {0} as an index into {1} values")]
+    CannotIndexUsing(ValueType, ValueType),
 
     /// Caused by attempting to alter a value that is read-only
     #[error("Specified index is read-only")]
